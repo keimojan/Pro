@@ -3413,5 +3413,19 @@
     bindVoiceButton();
     setTimeout(() => { if (restoreActiveVoicePayload()) retryActiveVoiceOrder(); }, 4500);
 </script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js", {
+      scope: "./"
+    }).then(function () {
+      console.log("تم تشغيل وضع الأوف لاين");
+    }).catch(function (error) {
+      console.error("فشل تشغيل Service Worker:", error);
+    });
+  });
+}
+</script>
+
 </body>
 </html>
