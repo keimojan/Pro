@@ -1,0 +1,3417 @@
+<!DOCTYPE html>
+<!--
+  🍽️ تطبيق المطاعم — V40.0 "Owned"
+  ═══════════════════════════════════════════════════════════════════════
+  ✅ الإنشاء من السيرفر (createOrder) — والمسار القديم يبقى سقوطاً آمناً.
+     يُغلق ثلاثة أعطال معاً:
+       ① حقن JavaScript عبر مُعرّف طلب يختاره المطعم
+       ② ازدواج الطلب عند إعادة الإرسال (cid — اختبار القبول الرابع)
+       ③ العمولة المزوّرة من العميل
+  ✅ orderCommand('CANCEL') في وضع الظلّ — قياس بلا اعتماد
+  ✅ رصد منظّم (client_events)
+
+  🎛️ USE_SERVER_CREATE = true  ← اجعله false للتراجع الفوري بلا نشر
+
+  ⚠️ يتطلّب قبله: database.rules.json V3.0  و  index.js CF-8.0
+  ⚠️ ولا يُنشر ".write": false قبل أن يقرأ الرصد صفر create_fallback
+     و صفر create_legacy لسبعة أيام متصلة.
+  ═══════════════════════════════════════════════════════════════════════
+-->
+<html lang="ar" dir="rtl">
+<head>
+    <script>
+        // --- إصدار 39.0 (Fortress 🛡️ — متناسق مع القواعد المحصّنة V2.0 + GAS V16.0 + CF-6.0) ---
+        //  ما تغيّر عن 38.0:
+        //  🔧[خ١]  إزالة getGlobalData نهائياً (صارت بوابة إدارية) — الإحداثيات وقائمة
+        //          الأسعار تصل الآن من استجابة تسجيل الدخول checkRes.
+        //  🔧[خ٥]  الإلغاء لم يعد حذفاً فعلياً (القواعد تمنعه) بل status='deleted' —
+        //          الطلب الملغى صار مؤرشَفاً وقابلاً للتدقيق بدل أن يتبخر.
+        //  🔧[خ٧]  تطبيع رقم النظام موحّد حرفياً مع السيرفرين (إسقاط 964 وكل الأصفار).
+        //  🔧[خ٢٣] قراءة الطلبات باستعلام مفهرس على resPhone بدل العقدة كاملة —
+        //          القاعدة الجديدة ترفض القراءة الكاملة لغير الإدارة.
+        //  🔒 ضمان مصادقة فايربيس قبل أي كتابة (القواعد لم تعد تقبل مجهولاً).
+        //  🛵 اسم الكابتن من drivers_locations/{phone}/name بدل شيت السائقين.
+        const CURRENT_APP_VERSION = "40.0.PRO-Swept";   /* 🔴 [V41-ج] بلا رفعه لا تُمسح الأصول ولا يصل التحديث كاشيراً واحداً */
+        const RES_VERSION_KEY = 'hut_res_app_version';
+        try {
+            if (localStorage.getItem(RES_VERSION_KEY) !== CURRENT_APP_VERSION) {
+                localStorage.setItem(RES_VERSION_KEY, CURRENT_APP_VERSION);
+                if (localStorage.getItem(RES_VERSION_KEY) === CURRENT_APP_VERSION) {
+                    if ('caches' in window) {
+                        caches.keys().then(function(names) {
+                            for (let name of names) caches.delete(name);
+                        });
+                    }
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(function(regs) {
+                            for (let r of regs) r.update();
+                        });
+                    }
+                    window.location.reload();
+                }
+            }
+        } catch(e) {
+            console.warn('تعذّر التحقق من الإصدار:', e.message);
+        }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <title>مطاعم PRO | منصة PRO</title>
+
+    <meta name="theme-color" content="#0f172a"> 
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="منصة PRO">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="manifest" href="manifest_restaurant.json">
+    <link rel="apple-touch-icon" href="pro_logo.png">
+    <link rel="icon" type="image/png" href="pro_logo.png">
+    <meta name="contact-email" content="Kamelwave@gmail.com">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest" defer></script>
+    
+    <style>
+        /* =========================================
+           الهوية البصرية - منصة PRO
+           ========================================= */
+        :root {
+            --primary: #1e293b;
+            --accent: #f97316; 
+            --success: #10b981;
+            --primary-blue: #ff8a00; 
+            --primary-blue-dark: #0f172a; 
+            
+            --bg-color: #ff8a00; 
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.8);
+            --glass-shadow: 0 8px 32px rgba(15, 23, 42, 0.04);
+        }
+
+        body { 
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 0%, #ffc568 0%, #ff8a00 48%, #e76f00 100%);
+            font-family: 'Cairo', sans-serif; 
+            color: var(--primary); 
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+            overscroll-behavior-y: contain;
+            padding-bottom: env(safe-area-inset-bottom);
+            min-height: 100vh;
+        }
+
+        input, textarea, select {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+
+        .hidden-section { display: none !important; }
+
+        #loadingOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px);
+            z-index: 9999; display: none; align-items: center; justify-content: center;
+            flex-direction: column; color: var(--primary-blue-dark);
+        }
+
+        .global-header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: transparent; 
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+        
+        .header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start; 
+            flex: 1; 
+        }
+        
+        .res-name-title {
+            font-weight: 900;
+            font-size: 1.1rem;
+            letter-spacing: 0.2px;
+            line-height: 1.2;
+            margin: 0;
+            color: var(--primary-blue-dark); 
+        }
+        
+        .partner-badge {
+            font-size: 0.65rem;
+            color: #64748b; 
+            font-weight: 800;
+            margin-top: 2px;
+        }
+
+        .header-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+        }
+
+        .custom-s-logo {
+            width: 42px; 
+            height: 42px;
+            margin-bottom: 2px;
+            position: relative;
+        }
+
+        .custom-s-logo svg {
+            width: 100%;
+            height: 100%;
+            stroke: #cbd5e1; 
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            transition: stroke 0.5s ease;
+        }
+
+        .header-center.active .custom-s-logo svg path,
+        .header-center.active .custom-s-logo svg circle {
+            stroke: url(#magicGradient); 
+            filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.5));
+        }
+
+        .pro-brand {
+            font-size: 0.75rem;
+            font-weight: 900;
+            color: #cbd5e1; 
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            transition: color 0.5s ease;
+        }
+        
+        .header-center.active .pro-brand {
+            color: var(--primary-blue); 
+        }
+
+        .header-left {
+            display: flex;
+            justify-content: flex-end; 
+            flex: 1;
+        }
+
+        .icon-btn-logout {
+            background: rgba(15, 23, 42, 0.05); 
+            color: #64748b;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .icon-btn-logout:hover {
+            background: rgba(15, 23, 42, 0.1);
+            color: var(--primary-blue-dark);
+        }
+        .icon-btn-logout:active { 
+            transform: scale(0.92); 
+            background: rgba(239, 68, 68, 0.1); 
+            border-color: rgba(239, 68, 68, 0.3); 
+            color: #ef4444;
+        }
+
+        .glass-card {
+            background: var(--glass-bg); 
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            border-radius: 24px; 
+            padding: 20px;
+            border: 1px solid var(--glass-border); 
+            box-shadow: var(--glass-shadow); 
+            margin-bottom: 20px;
+        }
+
+        .header-stats-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.6); 
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: 12px 8px;
+            margin-top: 5px; 
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            gap: 4px;
+        }
+
+        .stat-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #64748b;
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 900;
+            color: var(--primary-blue-dark);
+        }
+
+        .stat-divider {
+            width: 1px;
+            height: 30px;
+            background: rgba(15, 23, 42, 0.08);
+        }
+        
+        .form-label { font-weight: 700; color: #475569; font-size: 0.75rem; margin-bottom: 6px; display: block; text-align: right; }
+        
+        .custom-input {
+            background: rgba(255, 255, 255, 0.8); 
+            border: 1px solid transparent; 
+            border-radius: 16px; 
+            padding: 12px 15px; 
+            font-weight: 600; 
+            transition: 0.3s; 
+            width: 100%; font-size: 0.9rem; color: var(--primary-blue-dark);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+        .custom-input.phone-format { letter-spacing: 1px; font-size: 1.05rem; }
+        .custom-input:focus { background: white; border-color: rgba(59, 130, 246, 0.3); outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+
+        .smart-dropdown-wrapper { position: relative; width: 100%; }
+        .search-icon-inside { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
+        .smart-dropdown-list {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 16px;
+            box-shadow: 0 10px 35px rgba(0,0,0,0.1);
+            max-height: 200px; overflow-y: auto;
+            z-index: 100; margin-top: 5px;
+            border: 1px solid rgba(255, 255, 255, 1); display: none; padding: 6px;
+        }
+        .smart-dropdown-list.show { display: block; animation: slideDown 0.2s ease; }
+        .dropdown-item-area {
+            padding: 12px; border-radius: 12px; font-size: 0.85rem;
+            font-weight: 700; color: var(--primary-blue-dark);
+            cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center;
+        }
+        .dropdown-item-area:hover, .dropdown-item-area:active { background: #f1f5f9; }
+        .dropdown-item-area.other-opt { color: var(--accent); margin-top: 4px;}
+        .area-price-tag { font-size: 0.75rem; background: #f1f5f9; padding: 4px 8px; border-radius: 8px; color: var(--primary-blue-dark);}
+
+        .smart-phone-wrap { position: relative; }
+        .smart-phone-wrap .phone-clean-badge {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            background: var(--success); color: white; font-size: 0.6rem; padding: 4px;
+            border-radius: 50%; display: none; pointer-events: none;
+        }
+        .smart-phone-wrap.cleaned .phone-clean-badge { display: flex; align-items: center; justify-content: center;}
+
+        /* ⚡ تصميم التبويبات المطور */
+        .order-type-toggle { display: flex; background: rgba(15, 23, 42, 0.04); border-radius: 16px; padding: 5px; margin-bottom: 15px; }
+        .toggle-btn {
+            flex: 1; text-align: center; padding: 10px 4px; font-weight: 700; color: #64748b;
+            border-radius: 12px; cursor: pointer; transition: 0.3s ease;
+            display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 0.78rem;
+        }
+        .toggle-btn.active { background: white; color: var(--primary-blue-dark); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+
+        .commission-type-toggle { display: flex; background: rgba(15, 23, 42, 0.04); border-radius: 16px; padding: 5px; margin-bottom: 12px; }
+        .comm-type-btn {
+            flex: 1; text-align: center; padding: 10px 5px; font-weight: 700; color: #64748b;
+            border-radius: 12px; cursor: pointer; transition: 0.3s ease;
+            display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.8rem;
+        }
+        .comm-type-btn.active { background: white; color: var(--primary-blue-dark); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+
+        .smart-paste-btn {
+            background: rgba(34, 197, 94, 0.1);
+            color: #15803d;
+            border: 1px dashed rgba(34, 197, 94, 0.3);
+            border-radius: 14px;
+            padding: 10px 15px;
+            width: 100%;
+            font-size: 0.85rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 20px;
+        }
+        .smart-paste-btn:active {
+            transform: scale(0.98);
+            background: rgba(34, 197, 94, 0.2);
+        }
+
+        #pasteModal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px);
+            z-index: 10000; display: none; align-items: center; justify-content: center;
+        }
+        .paste-modal-content {
+            background: rgba(255,255,255,0.95);
+            border-radius: 24px; padding: 25px; width: 90%; max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .magical-submit-btn {
+            background: var(--primary-blue); 
+            color: white; border: none; border-radius: 16px;
+            padding: 14px; font-weight: 800; width: 100%; font-size: 1rem;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            transition: 0.3s; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+            margin-top: 10px;
+        }
+        .magical-submit-btn:active { transform: scale(0.97); }
+
+        .camera-btn { 
+            background: rgba(255,255,255,0.5); 
+            border: 2px dashed rgba(15, 23, 42, 0.15); border-radius: 20px; padding: 35px 20px; 
+            text-align: center; color: var(--primary-blue-dark); font-weight: 700; cursor: pointer; 
+            transition: 0.3s; display: flex; flex-direction: column; align-items: center; gap: 12px;
+            font-size: 0.9rem;
+        }
+        .camera-btn:active { transform: scale(0.98); background: white; }
+        .camera-btn i { color: var(--accent); }
+        
+        .preview-img { width: 100%; max-height: 180px; object-fit: contain; border-radius: 16px; border: 1px solid rgba(0,0,0,0.05); margin-top: 10px; }
+
+        /* 🎙️ زر التسجيل الصوتي الكبير */
+        .voice-record-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 10px;
+            gap: 18px;
+        }
+        .voice-btn {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: var(--primary-blue);
+            border: none;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            box-shadow: 0 8px 30px rgba(59, 130, 246, 0.35);
+            transition: transform 0.15s ease, background 0.2s ease;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            position: relative;
+        }
+        .voice-btn:active { transform: scale(0.95); }
+        .voice-btn .voice-icon { font-size: 44px; line-height: 1; }
+        .voice-btn .voice-label { font-size: 0.8rem; font-weight: 800; }
+        .voice-btn.recording {
+            background: #ef4444;
+            box-shadow: 0 8px 30px rgba(239, 68, 68, 0.45);
+            animation: voicePulse 1.2s ease-in-out infinite;
+        }
+        @keyframes voicePulse {
+            0%, 100% { box-shadow: 0 8px 30px rgba(239, 68, 68, 0.45), 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 8px 30px rgba(239, 68, 68, 0.45), 0 0 0 20px rgba(239, 68, 68, 0); }
+        }
+        .voice-btn.processing {
+            background: #64748b;
+            box-shadow: 0 8px 30px rgba(100, 116, 139, 0.35);
+            pointer-events: none;
+        }
+        .voice-hint {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #64748b;
+            text-align: center;
+            line-height: 1.6;
+            max-width: 280px;
+        }
+        .voice-timer {
+            font-size: 1.3rem;
+            font-weight: 900;
+            color: #ef4444;
+            font-variant-numeric: tabular-nums;
+            min-height: 24px;
+        }
+        .voice-wave {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 24px;
+        }
+        .voice-wave span {
+            width: 4px;
+            background: white;
+            border-radius: 2px;
+            animation: waveBar 0.8s ease-in-out infinite;
+        }
+        .voice-wave span:nth-child(1) { animation-delay: 0s; height: 10px; }
+        .voice-wave span:nth-child(2) { animation-delay: 0.15s; height: 18px; }
+        .voice-wave span:nth-child(3) { animation-delay: 0.3s; height: 24px; }
+        .voice-wave span:nth-child(4) { animation-delay: 0.45s; height: 16px; }
+        .voice-wave span:nth-child(5) { animation-delay: 0.6s; height: 10px; }
+        @keyframes waveBar { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+
+        .live-order-card {
+            background: rgba(255,255,255,0.9); border-radius: 20px; padding: 16px; margin-bottom: 12px;
+            border: none;
+            display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+        }
+        .order-header-row { display: flex; justify-content: space-between; align-items: flex-start; }
+        .order-id-text { font-weight: 900; color: var(--primary-blue-dark); font-size: 0.95rem; display: block;}
+        .order-time-text { font-size: 0.7rem; color: #94a3b8; font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 2px;}
+        
+        .btn-call-mini { background: #f0fdf4; border: none; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #16a34a; transition: 0.2s;}
+        .btn-call-mini:active { transform: scale(0.9); }
+        
+        .btn-cancel-grace { background: transparent; color: #ef4444; border: 1px solid #fee2e2; padding: 6px 12px; border-radius: 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+        
+        .btn-ready { background: #fff7ed; color: var(--accent); border: none; padding: 6px 14px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .ready-pill { display: inline-flex; align-items: center; gap: 4px; background: #fef9c3; color: #a16207; border-radius: 10px; padding: 6px 12px; font-size: 0.75rem; font-weight: 800; }
+
+        .order-details-row { display: flex; flex-direction: column; gap: 4px; }
+        .detail-item { font-weight: 700; font-size: 0.8rem; color: #475569; display: flex; align-items: center; gap: 6px;}
+
+        .progress-tracker { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; position: relative; padding: 0; }
+        .progress-line { position: absolute; top: 8px; left: 10%; right: 10%; height: 2px; background: #e2e8f0; z-index: 1; }
+        .progress-line-fill { position: absolute; top: 8px; right: 10%; height: 2px; background: var(--success); z-index: 2; transition: 0.4s width; }
+        .progress-step { position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 25%; }
+        .progress-dot { width: 18px; height: 18px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; transition: 0.3s; color: transparent; }
+        .progress-step.active .progress-dot { background: var(--success); color: white;}
+        .progress-step.current .progress-dot { background: var(--primary-blue-dark); color: white; box-shadow: 0 0 0 4px rgba(15, 23, 42, 0.1); }
+        .progress-label { font-size: 0.6rem; font-weight: 700; color: #94a3b8; text-align: center; }
+        .progress-step.active .progress-label, .progress-step.current .progress-label { color: var(--primary-blue-dark); }
+
+        /* الأرشيف الذكي والبحث */
+        .archive-item { 
+            display: flex; 
+            flex-direction: column; 
+            background: rgba(255,255,255,0.95); 
+            padding: 15px; 
+            border-radius: 16px; 
+            border: 1px solid rgba(0,0,0,0.05); 
+            margin-bottom: 12px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        }
+        .archive-details-box {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 12px;
+            font-size: 0.75rem;
+            color: #475569;
+            border: 1px dashed rgba(15, 23, 42, 0.1);
+        }
+        
+        .success-toast { background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); color: white; border-radius: 20px; padding: 20px; margin-top: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; animation: slideUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        
+        /* -------------------------------------
+           شاشة المصادقة والانتظار 
+           ------------------------------------- */
+        .login-wrapper { 
+            min-height: 100dvh; 
+            display: flex; 
+            flex-direction: column; 
+            background: var(--primary-blue-dark); 
+            position: relative; 
+            overflow-y: auto; 
+            justify-content: space-between;
+        }
+        
+        .login-card { 
+            background: white; 
+            border-radius: 24px; 
+            padding: 30px 25px; 
+            padding-bottom: calc(30px + env(safe-area-inset-bottom)); 
+            width: 100%; 
+            box-shadow: 0 -5px 25px rgba(0,0,0,0.1); 
+            margin: 0; 
+            max-width: 100%; 
+            border: none;
+        }
+        
+        .btn-refresh-waiting { background: #f1f5f9; color: var(--text-muted); border: 1px solid var(--border-light); font-weight: 700; border-radius: 12px; padding: 12px 20px; transition: 0.2s; border: none; }
+        .btn-edit-registration { background: transparent; color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 700; border-radius: 12px; padding: 10px; transition: 0.2s; font-size: 0.9rem; }
+        
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+    <div class="spinner-grow" style="color: var(--primary-blue-dark);" role="status"></div>
+</div>
+
+<div id="imageViewerModal" onclick="this.style.display='none'" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); z-index: 99999; align-items: center; justify-content: center; padding: 20px;">
+    <div style="position: relative; max-width: 100%; max-height: 100%;">
+        <button style="position: absolute; top: -40px; right: 0; background: rgba(255,255,255,0.2); border: 2px solid white; color: white; border-radius: 50%; width: 34px; height: 34px; font-weight: bold; cursor: pointer;">✕</button>
+        <img id="fullReceiptImage" src="" style="max-width: 100%; max-height: 80vh; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+    </div>
+</div>
+
+<audio id="welcomeSound" src="https://actions.google.com/sounds/v1/water/water_drop.ogg"></audio>
+
+<div id="pasteModal">
+    <div class="paste-modal-content">
+        <div style="background: rgba(34, 197, 94, 0.1); color: #15803d; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px;">
+            <i data-lucide="message-square-dashed" size="30"></i>
+        </div>
+        <h5 class="fw-black mb-2" style="color: var(--primary-blue-dark);">لصق رسالة الزبون</h5>
+        <p class="text-muted fw-bold mb-3" style="font-size: 0.75rem;">الصق الرسالة هنا وسيقوم ذكاء PRO الاصطناعي بتعبئة الحقول أوتوماتيكياً لاستخراج المنطقة وتفاصيل العنوان الدقيقة ✨.</p>
+        <textarea id="pasteTextInput" class="custom-input mb-3" rows="5" placeholder="مثال: أريد توصيل لحي الجامعة قرب مول بغداد، الحساب 15000، رقمي 077..."></textarea>
+        <div class="d-flex gap-2">
+            <button class="btn btn-light fw-bold" style="flex: 1; border-radius: 12px; font-size: 0.9rem;" onclick="closePasteModal()">إلغاء</button>
+            <button class="btn fw-bold text-white" id="processPasteBtn" style="flex: 1; border-radius: 12px; background: #15803d; font-size: 0.9rem;" onclick="processPastedText()">تحليل الرسالة <i data-lucide="sparkles" size="14" class="ms-1"></i></button>
+        </div>
+    </div>
+</div>
+
+<div id="loginSection" class="login-wrapper">
+    <div class="container py-5">
+        <div class="text-center mb-5 mt-4">
+            <h2 class="fw-black" style="color: white; letter-spacing: -0.5px;">منصة PRO</h2>
+            <p class="fw-bold" style="color: #94a3b8; font-size: 0.85rem;">نظام الإدارة اللوجستية الذكي</p>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-lg-5">
+                
+                <div class="login-card" id="authBox">
+                    <h4 class="fw-black mb-4 text-center">تسجيل دخول المنشأة</h4>
+                    
+                    <div class="mb-3 text-center">
+                        <label class="form-label text-center w-100">رقم هاتف المنشأة</label>
+                        <input type="tel" id="checkPhone" class="custom-input phone-format py-3 text-center" placeholder="07XXXXXXXXX" dir="ltr" autocomplete="off">
+                    </div>
+                    <div class="mb-4 text-center" id="loginPassContainer">
+                        <label class="form-label text-center w-100">كلمة المرور</label>
+                        <input type="password" id="checkPassword" class="custom-input py-3 text-center" placeholder="********" autocomplete="off">
+                    </div>
+
+                    <div id="registerFields" class="hidden-section text-start" style="animation: fadeIn 0.5s;">
+                        <hr class="my-4 opacity-10">
+                        <div class="d-flex align-items-center justify-content-center gap-2 mb-4 text-dark">
+                            <i data-lucide="building"></i>
+                            <h5 class="fw-black m-0">تسجيل مطعم جديد</h5>
+                        </div>
+                        
+                        <div class="mb-2"><input type="password" id="regPassword" class="custom-input" placeholder="إنشاء كلمة مرور قوية" autocomplete="off"></div>
+                        <div class="mb-2"><input type="text" id="regName" class="custom-input" placeholder="الاسم التجاري للمطعم" autocomplete="off"></div>
+                        <div class="mb-2"><input type="text" id="regArea" class="custom-input" placeholder="منطقة المطعم الأساسية" autocomplete="off"></div>
+                        
+                        <div class="mb-2">
+                            <label class="form-label" style="text-align: right; color: var(--primary-blue-dark); font-size: 0.75rem;">
+                                <i data-lucide="map-pin" size="14"></i> حدد موقع المطعم بدقة:
+                            </label>
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" id="mapSearchInput" class="custom-input py-1 mb-0" placeholder="اسم المطعم أو المنطقة..." style="font-size: 0.8rem; flex: 1;">
+                                <button type="button" class="btn btn-sm text-white fw-bold rounded-3 px-2" onclick="searchLocation()" style="background: var(--primary-blue-dark); border: none;">بحث</button>
+                            </div>
+                            <div class="position-relative">
+                                <div id="pickerMap" style="height: 150px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);"></div>
+                                <img src="https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png" class="map-crosshair" alt="Pin" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); z-index: 1000; pointer-events: none; width: 25px; height: 35px;">
+                                <button type="button" class="btn btn-sm bg-white text-primary position-absolute shadow-sm fw-bold d-flex align-items-center gap-1" style="bottom: 8px; right: 8px; z-index: 1000; border-radius: 10px; font-size: 0.7rem; border: 1px solid rgba(0,0,0,0.1);" onclick="forceLocateMe()">
+                                    <i data-lucide="crosshair" size="12"></i> موقعي
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label" style="text-align: right; color: var(--primary-blue-dark); font-size: 0.75rem;">نظام العمولة:</label>
+                            <div class="commission-type-toggle mb-2" id="commissionTypeToggle">
+                                <div class="comm-type-btn active" id="commTypeFixed" onclick="switchCommissionType('fixed')">💰 ثابت</div>
+                                <div class="comm-type-btn" id="commTypeSplit" onclick="switchCommissionType('split')">📊 مناصفة</div>
+                                <div class="comm-type-btn" id="commTypeMonthly" onclick="switchCommissionType('monthly')">📅 اشتراك شهري</div>
+                            </div>
+                            <div id="commFixedFields">
+                                <input type="text" id="regCommFixed" class="custom-input" placeholder="مبلغ العمولة (د.ع)" autocomplete="off" inputmode="decimal" oninput="updateCommissionString()">
+                            </div>
+                            <div id="commSplitFields" class="hidden-section">
+                                <div class="row g-2">
+                                    <div class="col-6"><input type="text" id="regCommSplitDriver" class="custom-input" placeholder="نصيب السائق" autocomplete="off" inputmode="decimal" oninput="updateCommissionString()"></div>
+                                    <div class="col-6"><input type="text" id="regCommSplitRes" class="custom-input" placeholder="نصيب المطعم" autocomplete="off" inputmode="decimal" oninput="updateCommissionString()"></div>
+                                </div>
+                            </div>
+                            <div id="commMonthlyFields" class="hidden-section">
+                                <input type="text" id="regCommMonthlyAmount" class="custom-input" placeholder="مبلغ الاشتراك الشهري (د.ع)" autocomplete="off" inputmode="decimal" oninput="updateCommissionString()">
+                            </div>
+                            <input type="hidden" id="regCommFinal" value="">
+                        </div>
+
+                        <div class="mb-2">
+                            <select id="regPay" class="custom-input px-1" style="font-size: 0.8rem;">
+                                <option value="المطعم يدفع" selected>المطعم يدفع</option>
+                                <option value="مناصفة">مناصفة مع السائق</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label" style="text-align: right; color: var(--primary-blue-dark); font-size: 0.75rem;">الصق أسعار التوصيل:</label>
+                            <textarea id="regPriceList" class="custom-input" rows="3" placeholder="انسخ الرسالة من الواتساب..." style="font-size: 0.8rem; text-align: right; resize: none;"></textarea>
+                        </div>
+                    </div>
+
+                    <button class="magical-submit-btn mt-2" id="mainAuthBtn" onclick="authAction()">
+                        دخول المنصة <i data-lucide="arrow-left" size="18"></i>
+                    </button>
+                    
+                    <div style="text-align: center; margin-top: 15px; font-size: 0.65rem; color: #94a3b8; font-weight: 700;">
+                        Powered by PRO Platform 🛵
+                    </div>
+                </div>
+
+                <div class="login-card hidden-section text-center" id="waitingBox">
+                    <div class="spinner-border mb-3" style="color: var(--primary-blue); width: 3rem; height: 3rem;" role="status"></div>
+                    <h5 class="fw-black mb-1 text-dark">يتم تهيئة النظام...</h5>
+                    <p class="text-muted fw-bold mb-3" style="font-size: 0.8rem;" id="waitingStatusText">في انتظار موافقة الإدارة...</p>
+                    <button class="btn btn-light fw-bold w-100 mt-2" onclick="window.checkWaitingStatus()">
+                        تحديث يدوي <i data-lucide="refresh-cw" size="14" class="ms-1"></i>
+                    </button>
+                    <button class="btn btn-link text-danger text-decoration-none fw-bold w-100 mt-2" onclick="window.exitWaitingRoom()">
+                        تعديل معلومات التسجيل
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="orderSection" class="hidden-section">
+    
+    <div class="global-header">
+        
+        <div class="header-right">
+            <h4 class="res-name-title" id="resTitle">جاري التحميل...</h4>
+            <div class="partner-badge">شريك معتمد - PRO</div>
+        </div>
+
+        <div class="header-center" id="headerCenterContainer">
+            <div class="custom-s-logo" id="headerRoutingIcon" style="display:flex;align-items:center;justify-content:center;background:#ff8a00;border-radius:12px;color:#111;font-size:.8rem;font-weight:900;font-style:italic;letter-spacing:-.5px;">PRO</div>
+            <span class="pro-brand">PRO</span>
+        </div>
+
+        <div class="header-left">
+            <button class="icon-btn-logout" onclick="logout()" title="تسجيل الخروج">
+                <i data-lucide="log-out" size="18"></i>
+            </button>
+        </div>
+
+    </div>
+
+    <div id="friendlyMessageBanner" class="container mt-2 mb-3 hidden-section" style="animation: slideDown 0.5s ease;">
+        <div style="background: linear-gradient(135deg, #e0f2fe, #f8fafc); border: 1px solid #bae6fd; border-radius: 16px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 15px rgba(59,130,246,0.05);">
+            <div id="friendlyIcon" style="font-size: 24px;">🌤️</div>
+            <div style="flex: 1;">
+                <div id="friendlyText" style="font-size: 0.8rem; font-weight: 800; color: var(--primary-blue-dark); line-height: 1.5;"></div>
+            </div>
+            <button onclick="document.getElementById('friendlyMessageBanner').style.display='none'" style="background: transparent; border: none; color: #94a3b8; padding: 4px;">✕</button>
+        </div>
+    </div>
+
+    <div class="container pb-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-6">
+
+                <div class="header-stats-container">
+                    <div class="stat-item">
+                        <span class="stat-label">طلبات الشهر</span>
+                        <span class="stat-value" id="statMonthOrders">0</span>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <span class="stat-label">العمولة (د.ع)</span>
+                        <span class="stat-value text-danger" id="statUnpaid">0</span>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <span class="stat-label">نظام الدفع</span>
+                        <span class="stat-value text-success" id="statPayType" style="font-size: 0.8rem;">---</span>
+                    </div>
+                </div>
+
+                <div class="glass-card mb-4">
+                    <div class="order-type-toggle">
+                        <div class="toggle-btn active" id="tabManual" onclick="switchTab('manual')">
+                            يدوي
+                        </div>
+                        <div class="toggle-btn" id="tabQuick" onclick="switchTab('quick')">
+                            سريع ⚡
+                        </div>
+                        <div class="toggle-btn" id="tabPhoto" onclick="switchTab('photo')">
+                            مسح <i data-lucide="sparkles" size="14" style="color: var(--primary-blue);"></i>
+                        </div>
+                        <div class="toggle-btn" id="tabVoice" onclick="switchTab('voice')">
+                            صوتي 🎙️
+                        </div>
+                    </div>
+                    
+                    <form id="orderForm">
+                        <div id="sharedAreaField">
+                            <div class="smart-paste-btn" id="pasteBtnSection" onclick="openPasteModal()">
+                                <i data-lucide="clipboard-paste" size="16"></i> الصق رسالة الواتساب هنا للتعبئة السريعة
+                            </div>
+
+                            <div class="mb-3" id="areaContainer">
+                                <label class="form-label">منطقة الزبون <span id="quickHint" class="hidden-section text-danger">(فقط المنطقة مطلوبة)</span></label>
+                                <div class="smart-dropdown-wrapper" id="smartDropdownWrap">
+                                    <i data-lucide="map-pin" class="search-icon-inside" size="16"></i>
+                                    <input type="text" id="areaDisplayInput" class="custom-input" style="padding-left: 35px; cursor: pointer;" placeholder="ابحث عن منطقة..." autocomplete="off" onfocus="openDropdown()" oninput="filterDropdown()">
+                                    <div class="smart-dropdown-list" id="smartDropdownList"></div>
+                                </div>
+                                <input type="hidden" id="customerArea" value="">
+
+                                <div id="priceHint" class="text-success small fw-bold mt-1 hidden-section px-2" style="font-size: 0.75rem;"></div>
+                                <div id="areaLiveCount" class="hidden-section mt-2 px-3 py-2" style="font-size:0.75rem; font-weight:700; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:12px;"></div>
+                                
+                                <div id="customAreaSection" class="hidden-section mt-2 p-3 rounded-4" style="background: rgba(15, 23, 42, 0.03);">
+                                    <div class="row g-2">
+                                        <div class="col-7">
+                                            <input type="text" id="customAreaName" class="custom-input py-2" placeholder="اسم المنطقة" oninput="saveDraft()">
+                                        </div>
+                                        <div class="col-5">
+                                            <input type="number" id="customAreaPrice" class="custom-input py-2" placeholder="السعر" oninput="saveDraft()">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="manualOnlyFields">
+                            <div class="row g-3 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">المبلغ (د.ع)</label>
+                                    <input type="number" id="orderPrice" class="custom-input" placeholder="0" autocomplete="off" oninput="saveDraft()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">رقم الزبون</label>
+                                    <div class="smart-phone-wrap" id="customerPhoneWrap">
+                                        <input type="tel" id="customerPhone" class="custom-input phone-format" placeholder="07XX" dir="ltr" autocomplete="off" oninput="handleSmartPhone(this)" onpaste="handleSmartPhonePaste(event)">
+                                        <span class="phone-clean-badge"><i data-lucide="check" size="10"></i></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">تفاصيل إضافية (أقرب نقطة دالة)</label>
+                                <input type="text" id="customerDetails" class="custom-input py-2" placeholder="مثال: قرب الجامع، بصف الحديقة..." autocomplete="off" oninput="saveDraft()">
+                            </div>
+                        </div>
+
+                        <div id="photoSection" class="hidden-section">
+                            <div class="mb-4 mt-2">
+                                <input type="file" id="receiptPhoto" accept="image/*" capture="environment" class="d-none" onchange="processImage(this)">
+                                <label for="receiptPhoto" class="camera-btn" id="cameraBtn">
+                                    <i data-lucide="scan-line" size="48" style="color: var(--primary-blue);"></i>
+                                    <span>اضغط لتصوير الوصل</span>
+                                    <small style="font-weight: 500; color: #94a3b8; font-size: 0.75rem;">النظام سيستخرج السعر والمنطقة آلياً</small>
+                                </label>
+                                <div id="photoPreviewContainer" class="hidden-section text-center">
+                                    <img id="photoPreview" class="preview-img" src="" alt="معاينة الوصل">
+                                    <button type="button" class="btn btn-sm mt-3 fw-bold" style="background: rgba(15,23,42,0.05); color: #475569; border-radius: 12px;" onclick="removePhoto()">
+                                        <i data-lucide="trash-2" size="14" class="me-1"></i> حذف وإعادة التصوير
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="voiceSection" class="hidden-section">
+                            <div class="voice-record-area">
+                                <div class="voice-timer" id="voiceTimer"></div>
+                                <button type="button" class="voice-btn" id="voiceBtn">
+                                    <span class="voice-icon" id="voiceIcon">🎙️</span>
+                                    <span class="voice-label" id="voiceLabel">اضغط مطولاً وتكلّم</span>
+                                </button>
+                                <div class="voice-hint" id="voiceHint">
+                                    اضغط الزر باستمرار وقل تفاصيل الطلب:<br>
+                                    <b>المنطقة، السعر، رقم الزبون</b><br>
+                                    ثم ارفع إصبعك ليُرسَل ويُحلَّل تلقائياً ✨<br>
+                                    <small style="color:#94a3b8;">أو اسحب إصبعك لأعلى أثناء التسجيل للإلغاء</small>
+                                </div>
+                                <div id="voiceUndoBar" style="display:none; align-items:center; justify-content:space-between; gap:10px; width:100%; max-width:300px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:16px; padding:10px 14px;">
+                                    <span style="font-size:0.8rem; font-weight:800; color:#b91c1c;">
+                                        سيُرسَل خلال <span id="voiceUndoCount">6</span> ثوانٍ
+                                    </span>
+                                    <button type="button" onclick="undoVoiceOrder()" style="background:#ef4444; color:#fff; border:none; border-radius:12px; padding:8px 16px; font-weight:800; font-size:0.8rem; font-family:'Cairo'; cursor:pointer;">
+                                        ↩︎ تراجع
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" id="submitOrderBtn" class="magical-submit-btn">
+                            إرسال الطلب الآن <i data-lucide="arrow-left" size="18"></i>
+                        </button>
+                    </form>
+
+                    <div id="orderStatusBox" class="hidden-section">
+                        <div class="success-toast" id="successToastContent">
+                            <div style="background: var(--success); width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 8px;">
+                                <i data-lucide="check" size="24" color="white"></i>
+                            </div>
+                            <div class="fw-black" id="statusMsg" style="font-size: 1rem;">تم إرسال الطلب!</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <div class="order-type-toggle mb-3" style="background: transparent; border: none; padding: 0;">
+                        <div class="toggle-btn active py-2" id="tabLiveOrders" onclick="switchListTab('live')" style="background: rgba(255,255,255,0.8); border: 1px solid rgba(0,0,0,0.05);">
+                            طلبات نشطة
+                        </div>
+                        <div class="toggle-btn py-2" id="tabTodayArchive" onclick="switchListTab('archive')" style="background: transparent;">
+                            مكتملة اليوم
+                        </div>
+                    </div>
+
+                    <div id="activeOrdersList">
+                        <div class="text-center text-muted fw-bold py-4 small" style="font-size: 0.8rem; background: rgba(255,255,255,0.4); border-radius: 20px;">
+                            <i data-lucide="inbox" size="24" class="mb-2 opacity-50"></i><br>
+                            لا توجد طلبات نشطة حالياً.
+                        </div>
+                    </div>
+
+                    <div id="todayArchiveList" class="hidden-section">
+                        <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+                            <span class="fw-bold text-muted" style="font-size: 0.8rem;">طلبات اليوم:</span>
+                            <span class="fw-black" style="font-size: 1.25rem; color: var(--primary-blue-dark);" id="todayOrdersCount">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+                            <span class="fw-bold text-muted" style="font-size: 0.8rem;">إجمالي الفواتير المكتملة:</span>
+                            <span class="fw-black text-success" style="font-size: 1.1rem;" id="todayTotalSales">0 <small class="fs-6">د.ع</small></span>
+                        </div>
+                        
+                        <div class="mb-3 px-1">
+                            <div class="position-relative">
+                                <i data-lucide="search" class="position-absolute" style="right: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8;" size="16"></i>
+                                <input type="text" id="searchArchiveInput" class="custom-input shadow-sm" style="padding-right: 38px; border-radius: 14px; background: white;" placeholder="بحث بالكابتن، المنطقة، رقم الزبون..." onkeyup="filterArchiveOrders()">
+                            </div>
+                        </div>
+
+                        <div id="todayArchiveItems">
+                            <div class="text-center text-muted fw-bold py-4 small" style="font-size: 0.8rem; background: rgba(255,255,255,0.4); border-radius: 20px;">
+                                لم تكتمل أي طلبات اليوم بعد.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    // 🔧[خ٢٣] استيراد أدوات الاستعلام المفهرس — القراءة الكاملة صارت ممنوعة بالقواعد
+    import { getDatabase, ref, onValue, update, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+    import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    // ⚠️ بعد إعادة نشر سكربت GAS V16.0 قد يتغيّر رابط النشر — حدّثه هنا.
+    const API_URL   = "https://script.google.com/macros/s/AKfycbygtwYCyKl983Ob8rWQ8yGvZ-laIUjaJMZhzqI0qeYsFcpcxYqcJSONmBjaqW8_T3GY/exec";
+    // 🔧[خ١/خ٣] التوكن القديم HUT_SECURE_99 محروق (كان مكشوفاً في الشيفرة المتداولة).
+    //   ضع هنا API_TOKEN **الجديد** الذي ضبطته في Script Properties — توكن التطبيقات
+    //   فقط، وليس ADMIN_API_TOKEN الذي لا يوضع في أي تطبيق أبداً.
+    const API_TOKEN = "HUT_APP_PRO_7A3F9C2E8B4D1F6A1C5E";
+
+    /* ══════════════════════════════════════════════════════════════════════
+       🔐 مفتاح Gemini غادر المتصفّح نهائياً.
+       ──────────────────────────────────────────────────────────────────────
+       كان مجزّأً إلى SECRET_PARTS ثم يُجمع بـjoin('') في السطر التالي —
+       أي مفتاح عام لمن يفتح أدوات المطوّر. التجزئة لم تكن حمايةً قط.
+       صار التحليل كلّه في Cloud Functions، والمصادقة برمز هوية فايربيس
+       الذي يحمله المطعم أصلاً — بلا أي مفتاح مشترك في التطبيق (خطأ خ٢).
+       ══════════════════════════════════════════════════════════════════════ */
+    const AI_ENDPOINT = "https://aiorderintake-bwwjduriea-ew.a.run.app";
+    const AI_QUEUE_KEY = "hut_ai_queue";
+
+    /* إرسال إلى بوّابة الذكاء. لا ينتظره الكاشير في مسارَي الصوت والوصل —
+       لذلك أي فشل يُحفظ محلياً ويُعاد لاحقاً، فلا يضيع طلب بصمت. */
+    async function sendToAI(payload, { queueOnFail = true } = {}) {
+        /* ═══════════════════════════════════════════════════════════════════
+           🔑 مفتاح التعريف (Idempotency Key) — النصف المكمّل لحماية السيرفر
+           ───────────────────────────────────────────────────────────────────
+           يُولَّد **مرة واحدة لكل نيّة** ويبقى ملتصقاً بالحمولة داخل الطابور،
+           فكل إعادة إرسال تحمل المفتاح نفسه ويتعرّف عليها aiOrderIntake
+           فيعيد النتيجة الأولى بلا إنشاء طلب جديد.
+
+           الجذر الذي يعالجه: catch أدناه يلتقط **أي** فشل — بما فيه ضياع
+           الجواب بعد نجاح السيرفر تماماً. فالعميل لا يعرف إن كان الانقطاع
+           وقع قبل إنشاء الطلب أم بعده، فيُعيد في الحالتين (حتى ٦ مرات) —
+           وبلا مفتاح، كل إعادة ناجحة كانت تُنشئ buildOrderId جديداً = طلباً
+           حقيقياً جديداً ⇒ ثلاثة كباتن على وصل واحد.
+
+           ⚠️ لا تنقل هذا السطر إلى flushAIQueue وإلا وُلّد مفتاح جديد لكل
+              محاولة وضاع الغرض كلياً.
+           ⚠️ يتطلّب index.js بإصدار CF-7.0 الذي يقرأ body.cid.
+           ═══════════════════════════════════════════════════════════════════ */
+        if (!payload.cid) {
+            payload.cid = (window.crypto && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : (Date.now() + "-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
+        }
+        try {
+            const ok = await requireCloudAuth();
+            if (!ok) throw new Error("NO_AUTH");
+
+            /* ══════════════════════════════════════════════════════════════
+               🗺️ قائمة مناطقك وأسعارها — ترافق كل نداء
+               ──────────────────────────────────────────────────────────────
+               حين كان التحليل في المتصفّح كانت matchAreaWithList تقرأ
+               myCustomPriceList مباشرةً، فيأتي سعر التوصيل تلقائياً مع
+               اسم المنطقة. وبعد نقل التحليل للسيرفر انقطعت الصلة: السيرفر
+               يبحث عن cfg.priceList في restaurants_config، و
+               mirrorRestaurantConfig لا يعكس هذا الحقل أصلاً — فلا قائمة
+               ولا سعر، وتعود المنطقة بلا رقم.
+
+               الحلّ: نرسلها مع الطلب. المطعم مالك قائمته وهي محمّلة عنده
+               أصلاً، فلا استعلام إضافي ولا تأخير.
+               (العمولة تبقى من السيرفر — يدهسها orderSanitizer.)
+               ══════════════════════════════════════════════════════════════ */
+            try {
+                if (myCustomPriceList && Object.keys(myCustomPriceList).length) {
+                    payload = Object.assign({}, payload, { areas: myCustomPriceList });
+                }
+            } catch (e) {}
+
+            const token = await auth.currentUser.getIdToken();
+            const r = await fetch(AI_ENDPOINT, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+                body: JSON.stringify(payload)
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || !data.ok) throw new Error(data.err || ("HTTP " + r.status));
+            return data;
+        } catch (e) {
+            if (queueOnFail) queueAI(payload);
+            throw e;
+        }
+    }
+
+    function queueAI(payload, opts) {
+        try {
+            const q = JSON.parse(localStorage.getItem(AI_QUEUE_KEY) || "[]");
+            const item = { payload, ts: Date.now(), tries: 0 };
+            /* [V41-ب] id للإلغاء · holdUntil لمهلة التراجع.
+               الحمولة تُحفظ في localStorage فوراً — فلو أُغلق التطبيق أو
+               انطفأت الشاشة أثناء الثواني الستّ، الطلب **لا يضيع**: يخرج
+               عند أول تفريغ بعد انقضاء المهلة. وهذا ما يجعل التراجع أأمن
+               من setTimeout بسيط يموت مع الصفحة ويأخذ الطلب معه. */
+            if (opts && opts.id) item.id = opts.id;
+            if (opts && opts.holdUntil) item.holdUntil = opts.holdUntil;
+            q.push(item);
+            localStorage.setItem(AI_QUEUE_KEY, JSON.stringify(q.slice(-12)));
+        } catch (e) {}
+    }
+
+    /* يحذف حمولة محجوزة من الطابور. يعيد true إن أدركها قبل الإرسال. */
+    function cancelQueuedAI(id) {
+        try {
+            const q = JSON.parse(localStorage.getItem(AI_QUEUE_KEY) || "[]");
+            const keep = q.filter(it => it.id !== id);
+            const removed = keep.length !== q.length;
+            localStorage.setItem(AI_QUEUE_KEY, JSON.stringify(keep));
+            return removed;
+        } catch (e) { return false; }
+    }
+
+    /* إعادة إرسال ما فشل — عند الإقلاع وكل دقيقة وعند عودة الشبكة */
+    let aiQueueBusy = false;
+    /* ═══════════════════════════════════════════════════════════════════════
+       📢 [V41-ب] الطابور لم يعد يُسقط بصمت
+       ───────────────────────────────────────────────────────────────────────
+       مسارا الصورة والصوت يعرضان النجاح **قبل** الإرسال (وهذا صحيح — الكاشير
+       لا يراجع شيئاً فيهما، فانتظاره هدر). لكن ما يفشل يدخل الطابور، وما
+       يُسقطه الطابور كان يذهب إلى console.warn — أي إلى لا مكان على جوال
+       أندرويد. ⇒ انقطاع شبكة ٢٥ دقيقة = طلبات تتبخّر والكاشير مطمئنّ.
+       ═══════════════════════════════════════════════════════════════════════ */
+    function reportLostIntake(item, why) {
+        try {
+            const kind = (item && item.payload && item.payload.kind) || "";
+            const label = kind === "voice" ? "الطلب الصوتي" : (kind === "receipt" ? "طلب الوصل" : "الطلب");
+            const t = item && item.ts ? new Date(item.ts).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : "";
+            resTrack('intake_lost', { reason: (why || '') + '|' + kind });
+            setTimeout(() => {
+                try {
+                    alert("🛑 لم يصل " + label + " المُرسَل الساعة " + t + ".\n\n" +
+                          (why === 'expired'
+                              ? "بقي في الانتظار أكثر من ٢٠ دقيقة بلا شبكة، فأُسقط كي لا يدخل الرادار متأخراً بعد أن سُلّم الطعام.\n\n"
+                              : "فشل الإرسال بعد ستّ محاولات.\n\n") +
+                          "⚠️ هذا الطلب غير موجود في النظام. أعد إدخاله.");
+                } catch (e) {}
+            }, 400);
+        } catch (e) {}
+    }
+
+    async function flushAIQueue() {
+        if (aiQueueBusy || !navigator.onLine) return;
+        let q = [];
+        try { q = JSON.parse(localStorage.getItem(AI_QUEUE_KEY) || "[]"); } catch (e) { return; }
+        if (!q.length) return;
+        aiQueueBusy = true;
+        const batch = q.splice(0, q.length);
+        localStorage.setItem(AI_QUEUE_KEY, JSON.stringify(q));
+        const fail = [];
+        for (const item of batch) {
+            if (item && item.payload && item.payload.kind === 'voice') {
+                if (!restoreActiveVoicePayload()) {
+                    activeVoicePayload = { payload: item.payload, tries: item.tries || 0, createdAt: item.ts || Date.now() };
+                    saveActiveVoicePayload();
+                    setTimeout(retryActiveVoiceOrder, 0);
+                }
+                continue;
+            }
+            /* ⏱️ [V41-ب] مهلة التراجع: الحمولة المحجوزة تعود للطابور بلا
+               إرسال ولا استهلاك محاولة — حتى تنقضي ثوانيها أو تُحذف بالإلغاء. */
+            if (item.holdUntil && Date.now() < item.holdUntil) {
+                fail.push(item);
+                continue;
+            }
+            /* ⏳ [عمر زمني] كان الطابور **بلا أي حدّ زمني** — وهو أخطر ممّا يبدو:
+               يعيش في localStorage فينجو من إغلاق التطبيق، وflushAIQueue تعمل
+               عند كل إقلاع. فوصلٌ فشل ليلاً كان يُنشئ **طلباً جديداً صباح الغد**
+               لطعامٍ سُلّم بالأمس — بعيداً كل البعد عن أي نافذة كشف تكرار. */
+            if (Date.now() - (item.ts || 0) > 20 * 60 * 1000) {
+                console.warn("⏳ أُسقطت حمولة قديمة من طابور الذكاء:",
+                             new Date(item.ts || 0).toISOString());
+                reportLostIntake(item, 'expired');   // [V41-ب] لم يعد صامتاً
+                continue;
+            }
+            try { await sendToAI(item.payload, { queueOnFail: false }); }
+            catch (e) {
+                item.tries = (item.tries || 0) + 1;
+                if (item.tries < 6) fail.push(item);
+                else reportLostIntake(item, 'max_tries');   // [V41-ب]
+            }
+        }
+        try {
+            const cur = JSON.parse(localStorage.getItem(AI_QUEUE_KEY) || "[]");
+            /* 🔧 [V41-ب] كان [...fail, ...cur] — وslice(-12) يأخذ الأخيرة اثنتي
+               عشرة، فالمقدّمة هي التي تُطرد. أي أن المحاولات الفاشلة (وهي
+               بالضبط ما يجب إنقاذه) كانت تُضحّى بها لصالح الجديدة. عُكس. */
+            localStorage.setItem(AI_QUEUE_KEY, JSON.stringify([...cur, ...fail].slice(-12)));
+        } catch (e) {}
+        aiQueueBusy = false;
+    }
+    window.addEventListener("online", flushAIQueue);
+    setInterval(flushAIQueue, 60000);
+    setTimeout(flushAIQueue, 4000);
+
+    /* أُزيلت fetchGeminiWithRetry: لم يعد التطبيق ينادي Gemini مباشرة.
+       التحليل كلّه يمرّ ببوّابة الذكاء في Cloud Functions. */
+    const Config = {
+      apiKey: "AIzaSyDOC7sDfBTn6ysHf_ePrpfuqZZc0KUcaxs",
+      authDomain: "kamel-1609c.firebaseapp.com",
+      databaseURL: "https://kamel-1609c-default-rtdb.firebaseio.com",
+      projectId: "kamel-1609c",
+      storageBucket: "kamel-1609c.firebasestorage.app",
+      messagingSenderId: "872951899097",
+      appId: "1:872951899097:web:d7e97deaebef93b96defc8"
+    };
+
+    const app = initializeApp(Config);
+    const db  = getDatabase(app);
+    const storage = getStorage(app); 
+    const auth = getAuth(app);
+    
+    let currentResName   = "";
+    let isRegistering    = false;
+    let currentOrderMode = 'manual';
+    let base64Receipt    = null; 
+    let myCustomPriceList= {};
+    let waitingPollingTimer = null; 
+    
+    let pickerMap;
+    let regLat = 35.468; 
+    let regLng = 44.392;
+    let regPhone = ""; 
+
+    let lastActiveHtml  = "";
+    let lastArchiveHtml = "";
+    let actionBlacklist     = [];
+    const BLACKLIST_TTL_MS  = 15000;
+    let liveActiveOrders = [];
+
+    let currentCommissionType = 'fixed'; 
+
+    /* ════════════════════════════════════════════════════════════
+       🔧[خ٧] تطبيع رقم النظام — **مطابق حرفياً** لدالة normalizePhone
+       في GAS V16.0 و CF-6.0: أرقام عربية → لاتينية، إسقاط 964،
+       إسقاط كل الأصفار البادئة.
+       جوهري: auth.uid الصادر من السيرفر هو هذه الصيغة بالضبط، والقواعد
+       تقارن resPhone == auth.uid حرفياً — أي انحراف = رفض الكتابة.
+       (النسخة القديمة كانت تُبقي 964 وتُسقط صفراً واحداً → مطعم مسجّل
+       بمفتاح الدولة كانت طلباته وديونه تحت مفتاح منشقّ.)
+    ════════════════════════════════════════════════════════════ */
+    function normalizeSystemPhone(raw) {
+        if (!raw) return "";
+        let p = String(raw);
+        const ar = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+        const fa = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+        for (let i = 0; i < 10; i++) {
+            p = p.split(ar[i]).join(String(i));
+            p = p.split(fa[i]).join(String(i));
+        }
+        p = p.replace(/\D/g, '');
+        if (p.startsWith('964')) p = p.slice(3);
+        p = p.replace(/^0+/, '');
+        return p;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       🔐 إعادة المصادقة السحابية + مزامنة بيانات المنشأة
+       تطلب توكناً جديداً من السيرفر وتصادق فايربيس، وتلتقط في الطريق
+       قائمة الأسعار والإحداثيات المحدثة من استجابة checkRes —
+       🔧[خ١] هذا يعوّض getGlobalData الملغاة (صارت بوابة إدارية).
+    ════════════════════════════════════════════════════════════ */
+    window.ensureResAuth = async function(phone, pass) {
+        if (!phone || !pass) return false;
+        const p = normalizeSystemPhone(phone);
+        try {
+            const r = await fetch(`${API_URL}?action=checkRes&phone=${p}&password=${encodeURIComponent(pass)}&token=${API_TOKEN}`);
+            const d = await r.json();
+            if (d && d._token) {
+                await signInWithCustomToken(auth, d._token);
+                console.log("✅ المطعم: تمت إعادة المصادقة بنجاح");
+            } else {
+                console.warn("⚠️ لم يصل _token عند إعادة مصادقة المطعم");
+            }
+            // مزامنة البيانات الحية من استجابة الدخول (بديل getGlobalData)
+            if (d) applyServerProfile(d, p);
+            return !!(d && d._token);
+        } catch (e) { console.error("فشل إعادة مصادقة المطعم:", e); return false; }
+    };
+
+    // تحديث الحالة المحلية من استجابة checkRes (قائمة الأسعار، الإحداثيات، العمولة، الاسم)
+    function applyServerProfile(d, normPhone) {
+        /* 🩹[خ٣٣] الاسم من السيرفر لا من الجلسة القديمة:
+           جلسة localStorage تعيش 24 ساعة وتحمل الاسم المحفوظ وقت الدخول.
+           فإن تغيّر اسم المطعم في الشيت (أو استُعمل الجهاز لحساب آخر سابقاً)،
+           بقيت الجلسة تكتب الاسم القديم مع الهاتف الصحيح — فيظهر الطلب باسم
+           مطعم آخر! الآن كل مصادقة تُزامن الاسم من هوية الهاتف. */
+        try {
+            const srvName = String(d.name || "").trim();
+            if (srvName && srvName !== String(currentResName || "").trim()) {
+                console.warn("🔄 تصحيح اسم المطعم: «" + currentResName + "» → «" + srvName + "»");
+                currentResName = srvName;
+                const el = document.getElementById('resTitle');
+                if (el) el.innerText = srvName;
+                try {
+                    const s = JSON.parse(localStorage.getItem('hut_res_session') || '{}');
+                    s.name = srvName;
+                    localStorage.setItem('hut_res_session', JSON.stringify(s));
+                } catch (e) {}
+            }
+        } catch (e) {}
+        try {
+            if (d.priceList) {
+                const fresh = JSON.parse(d.priceList);
+                if (JSON.stringify(fresh) !== JSON.stringify(myCustomPriceList)) {
+                    myCustomPriceList = fresh;
+                    savePriceListToCache(myCustomPriceList);
+                    window.buildCustomAreaDropdown();
+                }
+            }
+        } catch(e) {}
+        // 📍 تتطلب رقعة GAS الصغيرة (إرجاع lat/lng في checkRes) — انظر ملاحظات النشر.
+        if (d.lat != null && d.lng != null && Number(d.lat) !== 0) {
+            regLat = parseFloat(d.lat); regLng = parseFloat(d.lng);
+        }
+        try {
+            const s = JSON.parse(localStorage.getItem('hut_res_session') || '{}');
+            if (normPhone) s.phone = normPhone;
+            if (d.name) s.name = d.name;
+            if (d.comm !== undefined) s.comm = d.comm || '0';
+            if (d.payType) s.payType = d.payType;
+            if (regLat && regLng) { s.lat = regLat; s.lng = regLng; }
+            localStorage.setItem('hut_res_session', JSON.stringify(s));
+        } catch(e) {}
+    }
+
+    // 🔒 حارس المصادقة: القواعد الجديدة ترفض أي كتابة بلا توكن — لا نكتب قبل التأكد
+    /* ═══════════════════════════════════════════════════════════════════════
+       🆕 [V40] وحدة الإنشاء السيرفري
+       ─────────────────────────────────────────────────────────────────────
+       لماذا يُنشئ السيرفر الطلب بدل المطعم؟ ثلاثة أعطال بإصلاح واحد:
+
+       ① **حقن JavaScript.** مفاتيح فايربيس تمنع . $ # [ ] / — ولا تمنع
+          علامة التنصيص. والمطعم هو من يختار المفتاح (uniqueId أدناه).
+          فمُعرّفٌ يحتوي " يُلصَق بلا تهريب في نصّ إشعار السحب داخل
+          ProMessagingService، ثم يُنفَّذ في WebView كل كابتن عبر
+          pushEventToWeb — ومعه جسر AndroidRadar كاملاً.
+          (والقواعد V3.0 تُغلقه أيضاً بتقييد المفتاح — حزامان لا واحد.)
+
+       ② **ازدواج الطلب.** cid يجعل إعادة الإرسال تعود بنفس المُعرّف —
+          وهو اختبار القبول الرابع في README عندك: «مطعم يرسل وصلاً ثم
+          يقطع الشبكة ويعيدها ⇒ طلب واحد لا اثنان».
+
+       ③ **العمولة المزوّرة.** تُقرأ من restaurants_config لا من الحمولة،
+          فيسقط الاعتماد على orderSanitizer ليدهسها بعد الإنشاء.
+
+       وسقوطٌ آمن للمسار القديم: إن كانت الدالة غير منشورة أو المصادقة
+       ناقصة — أي حين نتيقّن أن **شيئاً لم يُنشأ** — نكتب مباشرةً كما كنا.
+       أمّا عند المهلة أو العطل الداخلي فلا نسقط: قد يكون الطلب أُنشئ،
+       فننبّه المطعم ليعيد الضغط — وcid يضمن أن الإعادة لا تُنتج توأماً.
+       ═══════════════════════════════════════════════════════════════════════ */
+    const fns = getFunctions(app, 'europe-west1');
+    const USE_SERVER_CREATE = true;   // اجعله false للتراجع الفوري بلا نشر
+
+    /* مفتاح النيّة: بصمة المحتوى + نافذة ١٥ دقيقة. فالضغط مرّتين على نفس
+       الطلب يعيد نفس المفتاح، وطلبٌ مختلف يأخذ مفتاحاً جديداً.
+       (١٥ دقيقة تطابق نوافذ التكرار في CF فلا يتعارض الحارسان.) */
+    /* ═══════════════════════════════════════════════════════════════════════
+       🔑 [V41] cid — مفتاح **محاولة**، لا بصمة **محتوى**
+       ───────────────────────────────────────────────────────────────────────
+       كان يُشتقّ من (الهاتف|التفاصيل|السعر|المنطقة) ويُحفظ ١٥ دقيقة. وفي
+       «الطلب السريع» تنهار هذه البصمة تماماً:
+
+           finalDetails = "⚡ طلب سريع (التفاصيل والفاتورة مع المطعم)"  ← ثابت
+           finalPrice   = myCustomPriceList[finalArea]                  ← من المنطقة
+
+       ⇒ كل طلب سريع لنفس المنطقة له البصمة ذاتها حرفياً ⇒ نفس cid ⇒
+         claimOp يردّه replay ⇒ createOrder يعيد مُعرّف الطلب **الأول**
+         بـ dedup:true ⇒ عشرة طلبات في الذروة تصير طلباً واحداً، وعشر
+         رسائل نجاح كاذبة.
+
+       والوضع السريع بلا هاتف زبون ولا تفاصيل ⇒ **لا يملك أي بيانات تميّز
+       طلباً عن آخر** ⇒ إلغاء التكرار بالمحتوى مستحيل فيه بنيوياً.
+
+       الغرض الأصلي — كما في تعليق sendToAI — «مفتاح يُولَّد مرّة واحدة لكل
+       نيّة». فليكن كذلك: يُولَّد عند بدء محاولة إرسال، ويُعاد استعماله في
+       إعادات المحاولة التلقائية وفي إعادة الضغط بعد SERVER_UNSURE (وهي
+       الحالة التي وُجد cid لأجلها)، ويُمسح عند نجاح مؤكَّد.
+
+       ✅ اختبار القبول الرابع يبقى محققاً: قطع الشبكة وإعادتها ⇒ نفس
+          المحاولة ⇒ نفس المفتاح ⇒ طلب واحد.
+       ✅ والضغط المزدوج مغطّى أصلاً بـ btn.disabled أثناء الإرسال.
+       ⚠️ لا تُعِد اشتقاقه من المحتوى مهما بدا ذلك «أذكى».
+       ═══════════════════════════════════════════════════════════════════════ */
+    let _attemptCid = null;
+
+    function beginAttemptCid() {
+        if (!_attemptCid) {
+            _attemptCid = (window.crypto && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : ('a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+        }
+        return _attemptCid;
+    }
+    function endAttemptCid() { _attemptCid = null; }
+
+    /* أعطالٌ نتيقّن معها أن السيرفر لم يُنشئ شيئاً ⇒ السقوط للمسار القديم آمن.
+       🔻 [V41] أُخرجت invalid-argument: معناها أن createOrder **فحص الحمولة
+          ورفضها عمداً**. والسقوط عندها يكتب set() مباشرةً بلا أي فحص —
+          فيدخل الطلب المرفوض من الباب الخلفي ويبطل نصف غرض الإنشاء
+          السيرفري. الرفض المتعمَّد يُعرض على الكاشير، لا يُلتفّ عليه. */
+    function isSafeToFallback(code) {
+        const c = String(code || '').toLowerCase();
+        return c.indexOf('unauthenticated') > -1 || c.indexOf('permission-denied') > -1
+            || c.indexOf('not-found') > -1     || c.indexOf('unimplemented') > -1;
+    }
+
+    function resTrack(ev, meta) {
+        try {
+            const ph = (window.__resPhone || '');
+            if (!ph || !auth.currentUser) return;
+            const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+            const rec = { ev: String(ev).slice(0, 40), ts: new Date().toISOString() };
+            if (meta && meta.orderId) rec.oid = String(meta.orderId).slice(0, 80);
+            if (meta && meta.reason)  rec.why = String(meta.reason).slice(0, 60);
+            set(ref(db, `client_events/${ph}/${id}`), rec).catch(() => {});
+        } catch (e) {}
+    }
+
+    /* يعيد مُعرّف الطلب، أو يرمي 'SERVER_UNSURE' إن تعذّر التيقّن. */
+    async function createOrderOnServer(payload) {
+        const cid = beginAttemptCid();   // [V41] مفتاح المحاولة لا بصمة المحتوى
+        let lastCode = '';
+        for (let i = 1; i <= 3; i++) {
+            try {
+                const call = httpsCallable(fns, 'createOrder');
+                const r = await Promise.race([
+                    call(Object.assign({}, payload, { cid: cid })),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('cid_timeout')), 15000))
+                ]);
+                const oid = r && r.data && r.data.orderId;
+                if (!oid) throw new Error('no_order_id');
+
+                /* ⚠️ [V41] dedup:true معناها أن السيرفر **لم يُنشئ شيئاً** —
+                   بل أعاد مُعرّف طلبٍ سابق بنفس المفتاح. وكان يُعامَل كنجاح
+                   كامل فتُعرض «تم إرسال الطلب بنجاح 🚀» — وهذا هو الضياع
+                   الصامت بعينه: الطلب لم يوجد قط والكاشير مطمئنّ.
+                   الآن يُرفع كحالة مميّزة يعرضها المسار الأعلى صراحةً. */
+                if (r.data.dedup) {
+                    resTrack('create_dedup', { orderId: oid });
+                    const err = new Error('SERVER_DEDUP');
+                    err.orderId = oid;
+                    throw err;
+                }
+                resTrack('create_server', { orderId: oid });
+                endAttemptCid();          // نجاح مؤكَّد ⇒ النيّة التالية مفتاحها الخاص
+                return oid;
+            } catch (e) {
+                if (e && e.message === 'SERVER_DEDUP') throw e;   // لا تُعامَل كعطل شبكة
+                lastCode = String((e && (e.code || e.message)) || '');
+                if (isSafeToFallback(lastCode)) { resTrack('create_fallback', { reason: lastCode }); return null; }
+                if (i === 3) break;
+                await new Promise(r => setTimeout(r, 800 * i));
+            }
+        }
+        resTrack('create_unsure', { reason: lastCode });
+        /* المفتاح **يبقى** — فإعادة الضغط تحمل النيّة نفسها ولا تُنتج توأماً. */
+        throw new Error('SERVER_UNSURE');
+    }
+
+    async function requireCloudAuth() {
+        if (auth.currentUser) return true;
+        const s = localStorage.getItem('hut_res_session');
+        if (s) {
+            try {
+                const sess = JSON.parse(s);
+                if (sess.phone && sess.password) await ensureResAuth(sess.phone, atob(sess.password));
+            } catch (e) {}
+        }
+        return !!auth.currentUser;
+    }
+
+    // مراقب: إن ضاعت مصادقة فايربيس فجأة، نعيدها تلقائياً من الجلسة المحفوظة
+    onAuthStateChanged(auth, (user) => {
+        if (!user) {
+            const s = localStorage.getItem('hut_res_session');
+            if (s) {
+                try {
+                    const sess = JSON.parse(s);
+                    if (sess.phone && sess.password) ensureResAuth(sess.phone, atob(sess.password));
+                } catch (e) {}
+            }
+        }
+    });
+
+    window.switchCommissionType = function(type) {
+        currentCommissionType = type;
+        document.querySelectorAll('.comm-type-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('commTypeFixed').classList.toggle('active', type === 'fixed');
+        document.getElementById('commTypeSplit').classList.toggle('active', type === 'split');
+        document.getElementById('commTypeMonthly').classList.toggle('active', type === 'monthly');
+
+        document.getElementById('commFixedFields').classList.add('hidden-section');
+        document.getElementById('commSplitFields').classList.add('hidden-section');
+        document.getElementById('commMonthlyFields').classList.add('hidden-section');
+
+        if (type === 'fixed') {
+            document.getElementById('commFixedFields').classList.remove('hidden-section');
+        } else if (type === 'split') {
+            document.getElementById('commSplitFields').classList.remove('hidden-section');
+        } else if (type === 'monthly') {
+            document.getElementById('commMonthlyFields').classList.remove('hidden-section');
+        }
+        window.updateCommissionString();
+    };
+
+    window.updateCommissionString = function() {
+        let finalValue = '';
+        if (currentCommissionType === 'fixed') {
+            finalValue = document.getElementById('regCommFixed').value.trim();
+        } else if (currentCommissionType === 'split') {
+            const driver = document.getElementById('regCommSplitDriver').value.trim();
+            const res = document.getElementById('regCommSplitRes').value.trim();
+            if (driver && res) {
+                finalValue = `${driver}/${res}`;
+            }
+        } else if (currentCommissionType === 'monthly') {
+            const amount = document.getElementById('regCommMonthlyAmount').value.trim();
+            if (amount) {
+                finalValue = `شهري ${amount}`;
+            }
+        }
+        document.getElementById('regCommFinal').value = finalValue;
+    };
+
+    function matchAreaWithList(aiArea, priceListObj) {
+        if (!aiArea || aiArea === "غير محددة") return null;
+        const areas = Object.keys(priceListObj);
+        let matched = areas.find(a => a.trim() === aiArea.trim());
+        if (matched) return { name: matched, price: priceListObj[matched] };
+        matched = areas.find(a => aiArea.includes(a) || a.includes(aiArea));
+        if (matched) return { name: matched, price: priceListObj[matched] };
+        return null;
+    }
+
+    window.openPasteModal = function() {
+        document.getElementById('pasteModal').style.display = 'flex';
+        document.getElementById('pasteTextInput').value = '';
+        setTimeout(() => document.getElementById('pasteTextInput').focus(), 100);
+    };
+
+    window.closePasteModal = function() {
+        document.getElementById('pasteModal').style.display = 'none';
+    };
+
+    window.processPastedText = async function() {
+        const text = document.getElementById('pasteTextInput').value.trim();
+        if (!text) { alert("يرجى لصق رسالة أولاً!"); return; }
+        
+        const btn = document.getElementById('processPasteBtn');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = `<div class="spinner-border spinner-border-sm me-1"></div> جاري الفهم...`;
+        btn.disabled = true;
+
+        const areaList = Object.keys(myCustomPriceList);
+        const areaNames = areaList.length > 0 ? areaList.join('، ') : 'مناطق كركوك';
+
+        const promptText = `أنت خبير في معالجة طلبات التوصيل في العراق. اقرأ هذه الرسالة المنسوخة من الواتساب: "${text}" واستخرج منها البيانات التالية بدقة:
+1. السعر (price): المجموع الكلي كرقم فقط بدون أي فواصل. (مثال: إذا قال 15 الف، اكتب 15000).
+2. الهاتف (phone): استخرج أي رقم هاتف يبدأ بـ 07.
+3. المنطقة (area): اسم المنطقة الأساسية. حاول مطابقتها مع هذه القائمة إن أمكن: [${areaNames}].
+4. التفاصيل الإضافية (details): استخرج أي كلام يدل على عنوان دقيق أو أقرب نقطة دالة، مثل: (قرب الجامع، بصف الحديقة الجبيرة، يم اسواق محمد، الخ...). لا تضع فيها الطلبات الغذائية بل ركز على العنوان الدقيق. إذا لم تجد، اتركها فارغة.
+
+يجب إرجاع النتيجة بصيغة JSON نقي فقط، بدون أي نصوص إضافية، بالشكل التالي:
+{
+  "price": "...",
+  "phone": "...",
+  "area": "...",
+  "details": "..."
+}`;
+
+        /* تحليل النصّ المنسوخ يبقى **منتظِراً**: الكاشير يراجع الحقول التي
+           تُملأ قبل الإرسال، فإخفاء الانتظار هنا يفقده فرصة التصحيح. */
+        try {
+            const resp = await sendToAI({ kind: "text", text: promptText }, { queueOnFail: false });
+            const cleanJson = resp.result || {};
+
+            if (cleanJson.phone) {
+                const { clean } = window.normalizeCustomerPhone(cleanJson.phone);
+                document.getElementById('customerPhone').value = clean || cleanJson.phone;
+                window.handleSmartPhone(document.getElementById('customerPhone'));
+            }
+            if (cleanJson.price) {
+                document.getElementById('orderPrice').value = String(cleanJson.price).replace(/\D/g, '');
+            }
+            if (cleanJson.details) {
+                document.getElementById('customerDetails').value = cleanJson.details;
+            }
+            if (cleanJson.area) {
+                const matched = matchAreaWithList(cleanJson.area, myCustomPriceList);
+                if (matched) {
+                    window.selectDropdownArea(matched.name, matched.price);
+                } else {
+                    document.getElementById('customerArea').value = "أخرى";
+                    document.getElementById('areaDisplayInput').value = "أخرى";
+                    document.getElementById('customAreaSection').classList.remove('hidden-section');
+                    document.getElementById('customAreaName').value = cleanJson.area;
+                    document.getElementById('priceHint').classList.add('hidden-section');
+                }
+            }
+
+            window.saveDraft();
+            window.closePasteModal();
+            
+            if (navigator.vibrate) navigator.vibrate([50, 50, 50]); 
+
+        } catch (e) {
+            alert("لم نتمكن من فهم الرسالة تلقائياً، يرجى ملء الحقول يدوياً.");
+        } finally {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        }
+    };
+
+    window.normalizeCustomerPhone = function(raw) {
+        if (!raw) return { clean: '', changed: false };
+        const original = raw;
+        const ar = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+        const fa = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+        let p = raw;
+        for (let i = 0; i < 10; i++) {
+            p = p.replace(new RegExp(ar[i], 'g'), String(i));
+            p = p.replace(new RegExp(fa[i], 'g'), String(i));
+        }
+        p = p.replace(/[^\d+]/g, '');
+        p = p.replace(/^\+9640?/, '0');
+        p = p.replace(/^009640?/, '0');
+        p = p.replace(/^9640?/, '0');
+        p = p.replace(/^\+964/, '0');
+        p = p.replace(/^00964/, '0');
+        if (/^7[0-9]{8,9}$/.test(p)) p = '0' + p;
+        const changed = (p !== original.replace(/[^\d+]/g, '') && p.length > 0);
+        return { clean: p, changed };
+    }
+
+    window.handleSmartPhone = function(input) {
+        const { clean, changed } = window.normalizeCustomerPhone(input.value);
+        const wrap = document.getElementById('customerPhoneWrap');
+        if (changed && clean.length >= 10) {
+            input.value = clean;
+            wrap.classList.add('cleaned');
+        } else { wrap.classList.remove('cleaned'); }
+        window.saveDraft();
+    };
+
+    window.handleSmartPhonePaste = function(e) {
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text');
+        const { clean, changed } = window.normalizeCustomerPhone(pasted);
+        const input = document.getElementById('customerPhone');
+        const wrap  = document.getElementById('customerPhoneWrap');
+        input.value = clean || pasted;
+        if (changed && clean.length >= 10) { wrap.classList.add('cleaned'); } else { wrap.classList.remove('cleaned'); }
+        window.saveDraft();
+    };
+
+    let audioCtx = null;
+    function unlockAudio() {
+        if (!audioCtx) {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                setInterval(() => {
+                    if (audioCtx && audioCtx.state === 'running') {
+                        const osc  = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain); gain.connect(audioCtx.destination);
+                        osc.frequency.value = 20000; gain.gain.value = 0.01;
+                        osc.start(); osc.stop(audioCtx.currentTime + 0.01);
+                    }
+                }, 5000);
+            } catch(e) {}
+        }
+        document.removeEventListener('touchstart', unlockAudio);
+        document.removeEventListener('click', unlockAudio);
+    }
+    document.addEventListener('touchstart', unlockAudio);
+    document.addEventListener('click', unlockAudio);
+
+    window.initPickerMap = function() {
+        if (!document.getElementById('pickerMap')) return;
+        if (pickerMap) { setTimeout(() => pickerMap.invalidateSize(), 500); return; }
+        pickerMap = L.map('pickerMap', { zoomControl: false }).setView([regLat, regLng], 14);
+        L.control.zoom({ position: 'bottomleft' }).addTo(pickerMap);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(pickerMap);
+        pickerMap.on('move', function () { 
+            regLat = pickerMap.getCenter().lat;
+            regLng = pickerMap.getCenter().lng; 
+        });
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                regLat = pos.coords.latitude; regLng = pos.coords.longitude;
+                pickerMap.setView([regLat, regLng], 16);
+            }, null, { timeout: 5000 });
+        }
+    };
+
+    window.searchLocation = function() {
+        const query = document.getElementById('mapSearchInput').value.trim();
+        if (!query) return;
+        window.showLoading(true);
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ", كركوك, العراق")}&limit=1`)
+            .then(r => r.json())
+            .then(data => {
+                window.showLoading(false);
+                if (data && data.length > 0) {
+                    regLat = parseFloat(data[0].lat); regLng = parseFloat(data[0].lon);
+                    if (pickerMap) { pickerMap.flyTo([regLat, regLng], 16); }
+                } else { alert("لم يتم العثور على المكان."); }
+            }).catch(() => { window.showLoading(false); alert("حدث خطأ أثناء البحث."); });
+    };
+
+    window.forceLocateMe = function() {
+        if (navigator.geolocation) {
+            window.showLoading(true);
+            navigator.geolocation.getCurrentPosition(pos => {
+                window.showLoading(false);
+                regLat = pos.coords.latitude; regLng = pos.coords.longitude;
+                pickerMap.flyTo([regLat, regLng], 16);
+            }, () => { window.showLoading(false); alert("يرجى التأكد من تشغيل الـ GPS."); },
+            { enableHighAccuracy: true, timeout: 10000 });
+        }
+    };
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       🖼️ [V41-ب] الصورة غادرت المسودّة النصّية
+       ───────────────────────────────────────────────────────────────────────
+       saveDraft تُنادى من أحد عشر موضعاً، منها oninput على أربعة حقول —
+       أي مع **كل حرف** يكتبه الكاشير. وكانت تُسلسِل base64Receipt كاملاً
+       معها: صورة ٩٥٠ بكسل بجودة ٠.٨٥ تعطي base64 بحدود ٣٠٠–٥٥٠ كيلوبايت.
+
+       ⇒ نصف ميغابايت يُكتب في sessionStorage مع كل ضغطة حرف بعد التقاط
+         صورة. على جوال رخيص هذا تهنيج محسوس في أكثر لحظة ازدحاماً.
+
+       الآن: الصورة في مفتاح مستقلّ يُكتب **مرّة واحدة** عند الالتقاط أو
+       الحذف، والمسودّة النصّية تبقى بضع مئات من البايتات.
+       ═══════════════════════════════════════════════════════════════════════ */
+    const DRAFT_IMG_KEY = 'hut_order_draft_img';
+
+    window.saveDraftImage = function() {
+        try {
+            if (base64Receipt) sessionStorage.setItem(DRAFT_IMG_KEY, base64Receipt);
+            else sessionStorage.removeItem(DRAFT_IMG_KEY);
+        } catch (e) { /* تجاوز الحصة: المسودّة النصّية أهمّ من الصورة */ }
+    };
+
+    window.saveDraft = function() {
+        const draft = {
+            mode: currentOrderMode,
+            area: document.getElementById('customerArea').value,
+            customAreaName : document.getElementById('customAreaName').value,
+            customAreaPrice: document.getElementById('customAreaPrice').value,
+            phone  : document.getElementById('customerPhone').value,
+            details: document.getElementById('customerDetails').value,
+            price  : document.getElementById('orderPrice').value,
+            hasImage: !!base64Receipt
+        };
+        sessionStorage.setItem('hut_order_draft', JSON.stringify(draft));
+    };
+
+    function restoreDraft() {
+        const draftStr = sessionStorage.getItem('hut_order_draft');
+        if (!draftStr) return;
+        try {
+            const draft = JSON.parse(draftStr);
+            if (draft.mode) window.switchTab(draft.mode, false);
+            if (draft.area) {
+                document.getElementById('customerArea').value = draft.area;
+                document.getElementById('areaDisplayInput').value = draft.area;
+                if (draft.area === "أخرى") {
+                    document.getElementById('customAreaSection').classList.remove('hidden-section');
+                    if (draft.customAreaName) document.getElementById('customAreaName').value = draft.customAreaName;
+                    if (draft.customAreaPrice) document.getElementById('customAreaPrice').value = draft.customAreaPrice;
+                }
+                window.showSelectedPrice();
+            }
+            if (draft.phone) document.getElementById('customerPhone').value = draft.phone;
+            if (draft.details) document.getElementById('customerDetails').value = draft.details;
+            if (draft.price) document.getElementById('orderPrice').value = draft.price;
+            if (draft.hasImage) {
+                base64Receipt = sessionStorage.getItem(DRAFT_IMG_KEY) || null;
+            }
+            if (base64Receipt) {
+                document.getElementById('photoPreview').src = base64Receipt;
+                document.getElementById('cameraBtn').classList.add('hidden-section');
+                document.getElementById('photoPreviewContainer').classList.remove('hidden-section');
+            }
+        } catch(e) {}
+    }
+
+    function clearDraft() {
+        sessionStorage.removeItem('hut_order_draft');
+        try { sessionStorage.removeItem(DRAFT_IMG_KEY); } catch (e) {}
+    }
+
+    window.buildCustomAreaDropdown = function() {
+        const listContainer = document.getElementById('smartDropdownList');
+        listContainer.innerHTML = '';
+        
+        if (Object.keys(myCustomPriceList).length === 0) {
+            listContainer.innerHTML = `<div class="dropdown-item-area other-opt" onclick="selectDropdownArea('أخرى')">إدخال منطقة يدوياً</div>`;
+            return;
+        }
+
+        let html = '';
+        Object.keys(myCustomPriceList).sort().forEach(area => {
+            const price = myCustomPriceList[area];
+            html += `<div class="dropdown-item-area" onclick="selectDropdownArea('${jss(area)}', ${Number(price)||0})">
+                        <span>${escapeHtml(area)}</span>
+                        <span class="area-price-tag">${price} د.ع</span>
+                     </div>`;
+        });
+        
+        html += `<div class="dropdown-item-area other-opt" onclick="selectDropdownArea('أخرى')">منطقة غير مدرجة</div>`;
+        listContainer.innerHTML = html;
+    };
+
+    window.openDropdown = function() {
+        document.getElementById('smartDropdownList').classList.add('show');
+        document.getElementById('areaDisplayInput').value = ''; 
+        window.filterDropdown();
+    };
+
+    window.filterDropdown = function() {
+        const input = document.getElementById('areaDisplayInput').value.toLowerCase();
+        const items = document.querySelectorAll('.dropdown-item-area');
+
+        items.forEach(item => {
+            if (item.classList.contains('other-opt')) {
+                item.style.display = 'flex'; 
+                return;
+            }
+            const text = item.innerText.toLowerCase();
+            if (text.includes(input)) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    };
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       🔢 [V41-ب] عدّاد المنطقة — بديل حارس التكرار في الوضع السريع
+       ───────────────────────────────────────────────────────────────────────
+       أُزيل الحارس بالمحتوى من السريع لأنه بلا معنى بنيوياً هناك (تفاصيل
+       ثابتة وسعر مشتقّ من المنطقة ⇒ كل الطلبات بصمة واحدة). وبديله ليس
+       اعتراضاً بل **معلومة**: كم طلباً نشطاً لديك الآن إلى هذه المنطقة.
+
+       فالكاشير يقرّر بنفسه — والمعلومة صحيحة دائماً، بعكس بصمة تخمّن.
+       ═══════════════════════════════════════════════════════════════════════ */
+    window.updAreaLiveCount = function() {
+        const el = document.getElementById('areaLiveCount');
+        if (!el) return;
+        const sel = String(document.getElementById('customerArea').value || '').trim();
+        if (!sel || sel === 'أخرى') { el.classList.add('hidden-section'); return; }
+        const base = sel.split('(')[0].trim();
+        const n = (liveActiveOrders || []).filter(o =>
+            String(o.area || '').split('(')[0].trim() === base).length;
+        if (n <= 0) { el.classList.add('hidden-section'); return; }
+        el.classList.remove('hidden-section');
+        el.innerHTML = '🛵 لديك <b>' + n + '</b> ' + (n === 1 ? 'طلب نشط' : 'طلبات نشطة') +
+                       ' إلى ' + escapeHtml(base) + ' — راجعها قبل الإرسال.';
+    };
+
+    window.selectDropdownArea = function(areaName, price = null) {
+        document.getElementById('customerArea').value = areaName;
+        document.getElementById('areaDisplayInput').value = areaName;
+        document.getElementById('smartDropdownList').classList.remove('show');
+        window.showSelectedPrice();
+        window.updAreaLiveCount();
+        window.saveDraft();
+    };
+
+    document.addEventListener('click', function(event) {
+        const wrap = document.getElementById('smartDropdownWrap');
+        const list = document.getElementById('smartDropdownList');
+        if (wrap && !wrap.contains(event.target)) {
+            list.classList.remove('show');
+            const actualVal = document.getElementById('customerArea').value;
+            if (document.getElementById('areaDisplayInput').value !== actualVal) {
+                document.getElementById('areaDisplayInput').value = actualVal;
+            }
+        }
+    });
+
+    window.showSelectedPrice = function() {
+        const areaName = document.getElementById('customerArea').value;
+        const priceHint = document.getElementById('priceHint');
+        const customSec = document.getElementById('customAreaSection');
+
+        if (areaName === "أخرى") {
+            priceHint.classList.add('hidden-section');
+            customSec.classList.remove('hidden-section');
+            return;
+        }
+        customSec.classList.add('hidden-section');
+        if (!areaName) { priceHint.classList.add('hidden-section'); return; }
+
+        priceHint.classList.remove('hidden-section');
+        const price = myCustomPriceList[areaName];
+        if (price) {
+            priceHint.innerHTML = `توصيل: ${price} د.ع`;
+            priceHint.className = "text-success small fw-bold mt-1 px-2";
+        }
+    };
+
+    function loadPriceListFromCache() {
+        const cached = localStorage.getItem('hut_res_price_list');
+        if (!cached) return false;
+        try {
+            const data = JSON.parse(cached);
+            if (data.timestamp && (Date.now() - data.timestamp) < 7 * 24 * 60 * 60 * 1000) {
+                myCustomPriceList = data.list;
+                return true;
+            }
+        } catch(e) {}
+        return false;
+    }
+
+    function savePriceListToCache(list) {
+        localStorage.setItem('hut_res_price_list', JSON.stringify({ list, timestamp: Date.now() }));
+    }
+
+    function convertArabicNumerals(str) {
+        const ar = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+        const fa = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+        let s = str;
+        for (let i = 0; i < 10; i++) {
+            s = s.replace(new RegExp(ar[i], 'g'), String(i));
+            s = s.replace(new RegExp(fa[i], 'g'), String(i));
+        }
+        return s;
+    }
+
+    function parseCustomPriceList(rawText) {
+        if (!rawText || rawText.trim() === "") return "{}";
+        let resultObj = {};
+        let text = convertArabicNumerals(rawText);
+        text = text.replace(/[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, ' ');
+        text.split('\n').forEach(line => {
+            if (line.trim() === "" || line.includes("تسعيرة") || line.includes("الادارة")) return;
+            line.split('+').forEach(sub => {
+                const match = sub.trim().match(/(.+?)\s*(\d+)\s*$/);
+                if (match && match.length >= 3) {
+                    const area  = match[1].replace(/[-._!@#$%^&*()=]+$/g, '').trim();
+                    const price = match[2].trim();
+                    if (area && price) resultObj[area] = parseInt(price);
+                }
+            });
+        });
+        return JSON.stringify(resultObj);
+    }
+
+    function checkSavedSession() {
+        const sessionStr = localStorage.getItem('hut_res_session');
+        const pendingStr = localStorage.getItem('hut_res_pending');
+        if (sessionStr) {
+            try {
+                const session = JSON.parse(sessionStr);
+                if (session.password) {
+                    document.getElementById('checkPassword').value = atob(session.password);
+                }
+                if ((Date.now() - session.timestamp) < 24 * 3600000) {
+                    document.getElementById('checkPhone').value = session.phone.startsWith('0') ? session.phone : '0' + session.phone;
+                    currentResName = session.name;
+                    regPhone = session.phone;
+                    if (session.lat && session.lng) { regLat = parseFloat(session.lat); regLng = parseFloat(session.lng); }
+                    if (session.password) { ensureResAuth(session.phone, atob(session.password)); }
+                    enterDashboard(); return true;
+                }
+            } catch(e) {}
+        } else if (pendingStr) {
+            document.getElementById('checkPhone').value = pendingStr;
+            const pendingPass = localStorage.getItem('hut_res_pending_pass');
+            if (pendingPass) document.getElementById('checkPassword').value = atob(pendingPass);
+            showWaitingRoom(); return true;
+        }
+        return false;
+    }
+
+    window.onload = function() {
+        if (!checkSavedSession()) {
+            const savedPhone = localStorage.getItem('hut_res_phone');
+            if (savedPhone) {
+                document.getElementById('checkPhone').value = savedPhone.startsWith('0') ? savedPhone : '0' + savedPhone;
+            }
+        }
+    };
+
+    window.logout = function() {
+        if (confirm("هل تريد تسجيل الخروج؟ سيتم مسح الذاكرة المؤقتة.")) {
+            signOut(auth).then(() => { 
+                localStorage.clear(); sessionStorage.clear(); location.reload();
+            }).catch(() => {
+                localStorage.clear(); sessionStorage.clear(); location.reload();
+            });
+        }
+    };
+
+    window.showLoading = function(s) {
+        document.getElementById('loadingOverlay').style.display = s ? 'flex' : 'none';
+    };
+
+    // ⚡ التبويبات والذاكرة الذكية للمطعم (تدعم الوضع الصوتي 🎙️)
+    window.switchTab = function(mode, triggerSave = true) {
+        currentOrderMode = mode;
+        document.getElementById('tabManual').classList.remove('active');
+        document.getElementById('tabQuick').classList.remove('active');
+        document.getElementById('tabPhoto').classList.remove('active');
+        const tabVoiceEl = document.getElementById('tabVoice');
+        if (tabVoiceEl) tabVoiceEl.classList.remove('active');
+        
+        const sharedArea = document.getElementById('sharedAreaField');
+        const manualFields = document.getElementById('manualOnlyFields');
+        const photoSection = document.getElementById('photoSection');
+        const voiceSection = document.getElementById('voiceSection');
+        const pasteBtn = document.getElementById('pasteBtnSection');
+        const quickHint = document.getElementById('quickHint');
+        const submitBtn = document.getElementById('submitOrderBtn');
+        
+        if (mode === 'manual') {
+            document.getElementById('tabManual').classList.add('active');
+            sharedArea.classList.remove('hidden-section');
+            manualFields.classList.remove('hidden-section');
+            photoSection.classList.add('hidden-section');
+            if (voiceSection) voiceSection.classList.add('hidden-section');
+            pasteBtn.classList.remove('hidden-section');
+            quickHint.classList.add('hidden-section');
+            if (submitBtn) submitBtn.classList.remove('hidden-section');
+        } else if (mode === 'quick') {
+            document.getElementById('tabQuick').classList.add('active');
+            sharedArea.classList.remove('hidden-section');
+            manualFields.classList.add('hidden-section');
+            photoSection.classList.add('hidden-section');
+            if (voiceSection) voiceSection.classList.add('hidden-section');
+            pasteBtn.classList.add('hidden-section');
+            quickHint.classList.remove('hidden-section');
+            if (submitBtn) submitBtn.classList.remove('hidden-section');
+        } else if (mode === 'voice') {
+            document.getElementById('tabVoice').classList.add('active');
+            sharedArea.classList.add('hidden-section');
+            manualFields.classList.add('hidden-section');
+            photoSection.classList.add('hidden-section');
+            if (voiceSection) voiceSection.classList.remove('hidden-section');
+            // الزر الرئيسي يُخفى — الإرسال يتم برفع الإصبع عن زر التسجيل
+            if (submitBtn) submitBtn.classList.add('hidden-section');
+        } else {
+            document.getElementById('tabPhoto').classList.add('active');
+            sharedArea.classList.add('hidden-section');
+            manualFields.classList.add('hidden-section'); 
+            photoSection.classList.remove('hidden-section');
+            if (voiceSection) voiceSection.classList.add('hidden-section');
+            if (submitBtn) submitBtn.classList.remove('hidden-section');
+        }
+
+        localStorage.setItem('hut_res_preferred_mode', mode);
+        if (triggerSave) window.saveDraft();
+    };
+
+    window.switchListTab = function(tab) {
+        document.getElementById('tabLiveOrders').style.background = 'transparent';
+        document.getElementById('tabLiveOrders').style.border = '1px solid transparent';
+        document.getElementById('tabTodayArchive').style.background = 'transparent';
+        document.getElementById('tabTodayArchive').style.border = '1px solid transparent';
+        
+        if (tab === 'live') {
+            document.getElementById('tabLiveOrders').style.background = 'rgba(255,255,255,0.8)';
+            document.getElementById('tabLiveOrders').style.border = '1px solid rgba(0,0,0,0.05)';
+            document.getElementById('activeOrdersList').classList.remove('hidden-section');
+            document.getElementById('todayArchiveList').classList.add('hidden-section');
+        } else {
+            document.getElementById('tabTodayArchive').style.background = 'rgba(255,255,255,0.8)';
+            document.getElementById('tabTodayArchive').style.border = '1px solid rgba(0,0,0,0.05)';
+            document.getElementById('todayArchiveList').classList.remove('hidden-section');
+            document.getElementById('activeOrdersList').classList.add('hidden-section');
+        }
+    };
+
+    window.processImage = function(input) {
+        if (input.files && input.files[0]) {
+            window.showLoading(true);
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas   = document.createElement('canvas');
+                    const MAX_W    = 950;
+                    const scale    = img.width > MAX_W ? MAX_W / img.width : 1;
+                    canvas.width   = img.width * scale;
+                    canvas.height  = img.height * scale;
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    base64Receipt  = canvas.toDataURL('image/jpeg', 0.85);
+                    
+                    document.getElementById('photoPreview').src = base64Receipt;
+                    document.getElementById('cameraBtn').classList.add('hidden-section');
+                    document.getElementById('photoPreviewContainer').classList.remove('hidden-section');
+
+                    window.saveDraftImage();   // [V41-ب] مرّة واحدة، لا مع كل حرف
+                    window.saveDraft();
+                    window.showLoading(false);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    };
+
+    window.removePhoto = function() {
+        base64Receipt = null;
+        document.getElementById('receiptPhoto').value = "";
+        document.getElementById('cameraBtn').classList.remove('hidden-section');
+        document.getElementById('photoPreviewContainer').classList.add('hidden-section');
+        window.saveDraftImage();
+        window.saveDraft();
+    };
+
+    window.authAction = function() {
+        let rawPhone = document.getElementById('checkPhone').value.trim();
+        let passAttempt = document.getElementById('checkPassword').value.trim();
+
+        if (!rawPhone) return alert("يرجى إدخال رقم الهاتف");
+        
+        // 🔧[خ٧] التطبيع الموحّد (يُسقط 964 أيضاً — كان يُسقط الصفر فقط)
+        const phone = normalizeSystemPhone(rawPhone);
+
+        if (isRegistering) {
+            const regPassword = document.getElementById('regPassword').value.trim();
+            const name = document.getElementById('regName').value.trim();
+            const area = document.getElementById('regArea').value.trim();
+            const comm = document.getElementById('regCommFinal').value.trim(); 
+            const pay  = document.getElementById('regPay').value;
+            const rawPriceListText = document.getElementById('regPriceList').value;
+            
+            if (!regPassword) return alert("يرجى إنشاء كلمة مرور لحماية حسابك.");
+            if (!name || !area || !comm) return alert("يرجى ملء جميع التفاصيل.");
+            if (Math.abs(regLat - 35.468) < 0.001 && Math.abs(regLng - 44.392) < 0.001) return alert("الرجاء تحديد موقع مطعمك على الخريطة.");
+            
+            const packedPriceList = parseCustomPriceList(rawPriceListText);
+            window.showLoading(true);
+            sendRegistration(name, phone, regPassword, area, comm, pay, regLat, regLng, packedPriceList);
+            return;
+        }
+
+        if (!passAttempt) return alert("يرجى إدخال كلمة المرور.");
+
+        window.showLoading(true);
+        fetch(`${API_URL}?action=checkRes&phone=${phone}&password=${encodeURIComponent(passAttempt)}&token=${API_TOKEN}`)
+            .then(r => r.json())
+            .then(data => handleLogin(data, phone, passAttempt))
+            .catch(() => { window.showLoading(false); alert("خطأ في الاتصال، حاول مجدداً."); });
+    };
+
+    function sendRegistration(name, phone, password, area, comm, pay, lat, lng, priceListStr) {
+        fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                action: 'RESTAURANT_REG', 
+                token: API_TOKEN, 
+                name, phone, area, comm, pay, lat, lng, 
+                priceList: priceListStr,
+                password: password
+            })
+        }).then(() => {
+            window.showLoading(false);
+            localStorage.setItem('hut_res_phone', phone);
+            localStorage.setItem('hut_res_pending', phone);
+            localStorage.setItem('hut_res_pending_pass', btoa(password));
+            // 📍 نحفظ إحداثيات التسجيل محلياً فوراً — تُستعمل للطلبات إلى أن
+            //    يؤكدها السيرفر عبر استجابة checkRes.
+            try {
+                localStorage.setItem('hut_res_reg_coords', JSON.stringify({ lat, lng }));
+            } catch(e) {}
+            showWaitingRoom();
+        }).catch(() => { window.showLoading(false); alert("حدث خطأ أثناء الإرسال."); });
+    }
+
+    function showWaitingRoom() {
+        document.getElementById('authBox').classList.add('hidden-section');
+        document.getElementById('waitingBox').classList.remove('hidden-section');
+        if (waitingPollingTimer) clearInterval(waitingPollingTimer);
+        waitingPollingTimer = setInterval(() => window.checkWaitingStatus(false), 15000);
+    }
+
+    window.exitWaitingRoom = function() {
+        localStorage.removeItem('hut_res_pending');
+        localStorage.removeItem('hut_res_pending_pass');
+        document.getElementById('waitingBox').classList.add('hidden-section');
+        document.getElementById('authBox').classList.remove('hidden-section');
+        document.getElementById('checkPhone').disabled = false;
+        isRegistering = true;
+        document.getElementById('loginPassContainer').classList.add('hidden-section');
+        document.getElementById('registerFields').classList.remove('hidden-section');
+        const btn = document.getElementById('mainAuthBtn');
+        btn.innerHTML = `إرسال طلب الانضمام <i data-lucide="send" size="16"></i>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        setTimeout(window.initPickerMap, 300);
+    };
+
+    window.checkWaitingStatus = function(isManual = false) {
+        let rawPhone = document.getElementById('checkPhone').value.trim() || localStorage.getItem('hut_res_pending');
+        if (!rawPhone) return;
+        
+        const phone = normalizeSystemPhone(rawPhone);
+        
+        let pass  = document.getElementById('checkPassword').value.trim();
+        if (!pass) {
+            const savedPass = localStorage.getItem('hut_res_pending_pass');
+            if (savedPass) pass = atob(savedPass);
+        }
+
+        fetch(`${API_URL}?action=checkRes&phone=${phone}&password=${encodeURIComponent(pass)}&token=${API_TOKEN}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === "active" || data.status === "inactive") {
+                    clearInterval(waitingPollingTimer);
+                    localStorage.removeItem('hut_res_pending');
+                    localStorage.removeItem('hut_res_pending_pass');
+                    currentResName = data.name;
+                    regPhone = phone;
+                    try { if (data.priceList) myCustomPriceList = JSON.parse(data.priceList); } catch(e) {}
+                    
+                    // إحداثيات التسجيل المحفوظة (إن وُجدت) ريثما يردّ السيرفر بها
+                    try {
+                        const rc = JSON.parse(localStorage.getItem('hut_res_reg_coords') || 'null');
+                        if (rc && rc.lat) { regLat = parseFloat(rc.lat); regLng = parseFloat(rc.lng); }
+                    } catch(e) {}
+
+                    const commRaw = data.comm || '0';
+                    localStorage.setItem('hut_res_session', JSON.stringify({
+                        phone, name: data.name, payType: data.payType || 'المطعم يدفع',
+                        comm: commRaw, 
+                        timestamp: Date.now(),
+                        password: btoa(pass),
+                        lat: regLat, lng: regLng
+                    }));
+                    applyServerProfile(data, phone);
+                    
+                    if (data._token) {
+                        signInWithCustomToken(auth, data._token).catch(e => console.error(" Auth Error:", e));
+                    }
+
+                    const wAudio = document.getElementById('welcomeSound');
+                    if (wAudio) { wAudio.currentTime = 0; wAudio.play().catch(() => {}); }
+                    document.getElementById('waitingBox').classList.add('hidden-section');
+                    enterDashboard();
+                } else if (data.status === "banned") {
+                    clearInterval(waitingPollingTimer); localStorage.removeItem('hut_res_pending'); localStorage.removeItem('hut_res_pending_pass');
+                    alert("⚠️ حساب محظور."); location.reload();
+                } else if (data.status === "wrong_password" || data.status === "rate_limited" || data.status === "no_password_set") {
+                    clearInterval(waitingPollingTimer); localStorage.removeItem('hut_res_pending'); localStorage.removeItem('hut_res_pending_pass');
+                    alert("كلمة المرور تغيرت أو تم حظر الحساب مؤقتاً."); location.reload();
+                } else if (data.success === false && isManual) {
+                    /* 🔧 رفض التوكن كان يمرّ صامتاً هنا فتبقى غرفة الانتظار للأبد */
+                    alert("🛑 السيرفر رفض الطلب: " + (data.msg || "") + "\nتحقق من تطابق التوكن ورابط API مع النشر الجديد.");
+                }
+            }).catch(() => {});
+    };
+
+    function handleLogin(data, phone, passAttempt) {
+        window.showLoading(false);
+
+        if (data.status === "wrong_password") {
+            return alert("❌ كلمة المرور غير صحيحة.");
+        }
+        
+        if (data.status === "rate_limited") {
+            return alert("🛡️ تم حظر محاولات الدخول مؤقتاً لحمايتك بسبب كثرة الإدخال الخاطئ. يرجى المحاولة بعد 15 دقيقة.");
+        }
+
+        // 🔧[خ١٨] حالة جديدة من GAS V16.0: حساب قديم بلا كلمة مرور محفوظة
+        if (data.status === "no_password_set") {
+            return alert("🔒 حسابك مسجّل بلا كلمة مرور (نظام قديم). تواصل مع الإدارة لضبط كلمة مرور لحسابك ثم عاود الدخول.");
+        }
+
+        if (data.status === "active" || data.status === "inactive") {
+            if (data._token) {
+                signInWithCustomToken(auth, data._token)
+                    .then(() => console.log("✅ تم تسجيل الدخول لفايربيس بأمان"))
+                    .catch(e => console.error("❌  Auth Error:", e));
+            }
+
+            currentResName = data.name; localStorage.setItem('hut_res_phone', phone);
+            localStorage.removeItem('hut_res_pending'); regPhone = phone;
+            try { if (data.priceList) myCustomPriceList = JSON.parse(data.priceList); } catch(e) {}
+            
+            const commRaw = data.comm || '0';
+            localStorage.setItem('hut_res_session', JSON.stringify({
+                phone, name: data.name, payType: data.payType || 'المطعم يدفع',
+                comm: commRaw,
+                timestamp: Date.now(),
+                password: btoa(passAttempt)
+            }));
+            applyServerProfile(data, phone);
+            enterDashboard();
+        } else if (data.status === "pending" || data.status === "waiting") {
+            localStorage.setItem('hut_res_phone', phone); 
+            localStorage.setItem('hut_res_pending', phone);
+            localStorage.setItem('hut_res_pending_pass', btoa(passAttempt));
+            showWaitingRoom();
+        } else if (data.status === "banned") {
+            alert("⚠️ الحساب محظور."); localStorage.clear(); sessionStorage.clear();
+        } else if (data.success === false) {
+            /* 🔧 رفض بوابة السيرفر (توكن غير متطابق غالباً) — كان يتنكّر
+               بزيّ "حساب غير موجود" ويرمي المستخدم لشاشة التسجيل! */
+            alert("🛑 السيرفر رفض الطلب: " + (data.msg || "") +
+                "\n\nالأرجح أن توكن التطبيق لا يطابق توكن السكربت المنشور، أو أن API_URL يشير لنشر قديم." +
+                "\nتأكد أن Code.gs V16.1 منشور وأن setupSecureProperties شُغّلت بالتوكن الجديد.");
+        } else if (data.status === "not_found") {
+            /* الحالة الوحيدة المشروعة لفتح التسجيل: السيرفر قال صراحةً "غير موجود" */
+            isRegistering = true; 
+            document.getElementById('loginPassContainer').classList.add('hidden-section');
+            document.getElementById('registerFields').classList.remove('hidden-section');
+            document.getElementById('checkPhone').disabled = true;
+            const btn = document.getElementById('mainAuthBtn');
+            btn.innerHTML = `إرسال طلب الانضمام <i data-lucide="send" size="16"></i>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            setTimeout(window.initPickerMap, 300);
+        } else {
+            alert("تعذر التحقق — استجابة غير متوقعة من السيرفر (" + (data.status || JSON.stringify(data).slice(0,60)) + "). لم يُفتح التسجيل احتياطاً.");
+        }
+    }
+
+    async function enterDashboard() {
+        /* 🔭 [V41] كان __resPhone يُضبَط داخل مسار الإنشاء وحده — فمطعمٌ
+           يفتح التطبيق ويلغي طلباً دون أن يُنشئ واحداً في تلك الجلسة لا
+           يُسجَّل عنه shadow_reject إطلاقاً. وشرط تشديد القواعد في README
+           هو «سبعة أيام نظيفة» — فكانت النظافة قد تكون عمى القياس لا
+           سلامة المسار. الضبط هنا يغطّي كل جلسة منذ لحظتها الأولى. */
+        try {
+            let p = regPhone;
+            if (!p) { const s = localStorage.getItem('hut_res_session'); if (s) p = JSON.parse(s).phone; }
+            const np = normalizeSystemPhone(p);
+            if (np) window.__resPhone = np;
+        } catch (e) {}
+
+        document.getElementById('loginSection').classList.add('hidden-section');
+        document.getElementById('orderSection').classList.remove('hidden-section');
+        document.getElementById('resTitle').innerText = currentResName;
+        
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        const prefMode = localStorage.getItem('hut_res_preferred_mode') || 'manual';
+        window.switchTab(prefMode, false);
+
+        // 🔧[خ١] أُزيل نداء getGlobalData نهائياً — كان يسحب شيتات كاملة (بكلمات
+        //   المرور!) وصار بوابة إدارية. قائمة الأسعار والإحداثيات تصل الآن من
+        //   استجابة checkRes (في handleLogin/ensureResAuth) ومن الكاش المحلي.
+        const hasCached = loadPriceListFromCache();
+        window.buildCustomAreaDropdown();
+        restoreDraft();
+        
+        showFriendlyMessage();
+
+        /* WebView الجديد لا يملك جلسة Firebase قديمة مثل التطبيق السابق.
+           ننتظر إتمام التوكن قبل تركيب المستمعات؛ وإلا يرفض Firebase القراءة
+           الأولى وتبقى الإحصاءات وقائمة الكابتن صفراً رغم وجود البيانات. */
+        const cloudReady = await requireCloudAuth();
+        if (!cloudReady) {
+            console.error("❌ تعذر إتمام مصادقة Firebase قبل تحميل بيانات المطعم.");
+            return;
+        }
+        startHotDataListeners();
+    }
+
+    let globalLiveDebt = 0;
+    let globalLiveCount = 0;
+
+    // 🛵 اسم الكابتن: كان يأتي من شيت السائقين عبر getGlobalData (ملغاة).
+    //   الآن نقرأ drivers_locations/{phone}/name (السيرفر يختمه عند دخول الكابتن —
+    //   انظر رقعة GAS في ملاحظات النشر). بكاش محلي + إعادة رسم عند الوصول.
+    const driverNameCache = {};
+    const driverNameFetching = new Set();
+    function getDriverNameCached(phone) {
+        if (!phone || ["system_routing","pending_driver","manual_pending",""].includes(String(phone))) return null;
+        if (driverNameCache[phone] !== undefined) return driverNameCache[phone];
+        if (!driverNameFetching.has(phone)) {
+            driverNameFetching.add(phone);
+            get(ref(db, `drivers_locations/${phone}/name`))
+                .then(s => {
+                    driverNameCache[phone] = s.val() || "";
+                    // اسم جديد وصل → أعِد بناء القوائم لتظهر الأسماء
+                    lastActiveHtml = ""; lastArchiveHtml = "";
+                    rebuildOrderLists();
+                })
+                .catch(() => { driverNameCache[phone] = ""; })
+                .finally(() => driverNameFetching.delete(phone));
+        }
+        return null;
+    }
+    function driverDisplayName(phone) {
+        const n = getDriverNameCached(phone);
+        return (n && n.trim()) ? n : "كابتن التوصيل";
+    }
+
+    let lastOrdersSnapshot = {};
+    let mirrorToday = {};   // 🪞 [V41] ledgers/restaurants/{هاتف}/today/{يوم}/{طلب}
+
+    function startHotDataListeners() {
+        let safeResPhone = regPhone;
+        if (!safeResPhone) { const s = localStorage.getItem('hut_res_session'); if (s) safeResPhone = JSON.parse(s).phone; }
+        const myPhone = normalizeSystemPhone(safeResPhone);
+        if (!myPhone) { console.error("❌ لا يمكن بدء المستمعات بلا رقم منشأة."); return; }
+
+        // 🔧[خ٢٣] استعلام مفهرس على resPhone بدل قراءة العقدة كاملة:
+        //   القاعدة الجديدة ترفض onValue على active_orders كلها لغير الإدارة،
+        //   وتسمح فقط بـ query.orderByChild == 'resPhone' && query.equalTo == auth.uid.
+        //   مكسب جانبي: لم نعد نحمّل طلبات كل المدينة إلى جوال المطعم.
+        const myOrdersQuery = query(ref(db, 'active_orders'), orderByChild('resPhone'), equalTo(myPhone));
+        onValue(myOrdersQuery, (snapshot) => {
+            lastOrdersSnapshot = snapshot.val() || {};
+            rebuildOrderLists();
+        }, (err) => {
+            console.error("❌ مستمع الطلبات رُفض:", err && err.message);
+            // غالباً: المصادقة لم تكتمل بعد → نعيد المصادقة ثم يُعاد الاتصال تلقائياً
+            requireCloudAuth();
+        });
+
+        onValue(ref(db, `ledgers/restaurants/${myPhone}`), (snapshot) => {
+            const ledger = snapshot.val() || { completed_orders: 0, debt: 0 };
+            window.currentLedgerData = ledger; 
+
+            /* 🪞 [V41] مرآة اليوم — الأرشيف الذي حجبته القواعد
+               completed_orders ممنوعة على المطعم (admin/staff فقط)، وكان
+               يقرأ منجزاته من active_orders لأنها تحمل اليوم كلّه حتى
+               الفجر. ومع terminalOrderSweeper تغادرها خلال ٤٥ دقيقة.
+               السيرفر يكتب نسخة نحيفة هنا في نفس التحديث الذرّي للنقل. */
+            mirrorToday = (ledger.today && typeof ledger.today === 'object') ? ledger.today : {};
+            rebuildOrderLists();
+
+            const s = localStorage.getItem('hut_res_session');
+            if (s) { document.getElementById('statPayType').innerText = (JSON.parse(s).payType || '').includes("مناصفة") ? "مناصفة" : "المطعم"; }
+        });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       🪞 [V41] أرشيف اليوم — من المصدرين معاً
+       ───────────────────────────────────────────────────────────────────────
+       كان يُبنى من active_orders وحدها، وكان ذلك صحيحاً ما دامت تحمل اليوم
+       كلّه حتى الفجر. ومع terminalOrderSweeper يغادرها المنتهي خلال ٤٥
+       دقيقة ⇒ التبويب يفرغ بعد الظهر والمطعم يظنّ أنه لم ينجز شيئاً.
+
+       الآن: المنتهي المتبقّي في active_orders + مرآة اليوم من الدفتر،
+       بإزالة التكرار بالمُعرّف — فالطلب يُحسب مرّة واحدة سواء أُدرِك قبل
+       الكنس أو بعده، والرقم لا يقفز عند لحظة النقل.
+
+       💰 والمال لا يُمَسّ: globalLiveCount و globalLiveDebt تبقيان من
+          active_orders **وحدها**، لأن الطلب المنقول تزيده الأرشفة في
+          الدفتر ذرّياً. جمعُ المرآة إليهما كان سيحتسبه مرّتين.
+       ═══════════════════════════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════════════════════════════
+       🛡️ [V41-ب] escapeHtml — الطبقة التي لم تُغلق مع مُعرّف الطلب
+       ───────────────────────────────────────────────────────────────────────
+       أغلقت V40 حقن JS عبر المُعرّف (صار السيرفر يولّده). لكن الملف كان
+       **بلا أي تهريب**، وأربعة حقول تُلصَق خاماً في innerHTML.
+
+       وأخطرها dName: الكابتن يكتب اسمه في تسجيله (DRIVER_REG)، وGAS يختمه
+       عند دخوله في drivers_locations/{phone}/name — ومنه يُعرض في أرشيف
+       **كل مطعم يعمل معه**. الإدارة توافق وهي ترى نصاً عادياً في الشيت.
+       نمطٌ مطابق لعطب المُعرّف، بمصدرٍ آخر.
+
+       ⚠️ يُستعمل في نصّ HTML وفي قيمة سمة معاً، لذا نُهرّب " و ' أيضاً.
+       ═══════════════════════════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════════════════════════════
+       🔴 [V41-ج] sid و jss — **منقولتان حرفياً من driver.html**
+       ───────────────────────────────────────────────────────────────────────
+       ولم تُكتَبا هنا من جديد عمداً: النمط واحد، وتعليقهما هناك يشرح لماذا
+       escapeHtml وحدها لا تكفي في سياق onclick.
+
+       المشكلة: في   onclick="f('${x}')"   يمرّ النصّ بمحلّلين متتاليين —
+       محلّل HTML يفكّ السمة **ويفكّ الكيانات**، ثم محلّل JS يفكّ السلسلة
+       عند العلامة المفردة. فـ escapeHtml تحوّل ' إلى &#39; ثم **يفكّها
+       محلّل HTML قبل أن يصل الدور إلى JS** ⇒ منطقة اسمها حي's تُنتج
+       selectDropdownArea('حي's', 0) ⇒ SyntaxError.
+
+       ⇒ escapeHtml للنصّ الظاهر · jss داخل onclick · sid للمُعرّفات.
+       ═══════════════════════════════════════════════════════════════════════ */
+    function sid(x){ return String(x??'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,64); }
+    function jss(x){
+      return String(x??'')
+        .replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;')
+        .replace(/\r?\n/g,' ')
+        .replace(/&(?!quot;)/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function escapeHtml(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function archiveRowHtml(o) {
+        const orderTime = o.ts ? new Date(o.ts).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '';
+        const dPhone = o.drv || "";
+        const dName  = escapeHtml(driverDisplayName(dPhone));
+        const isValidPhone = dPhone && !["system_routing", "pending_driver", "manual_pending"].includes(dPhone);
+        const orderArea = escapeHtml(o.area || "غير محددة");
+        const orderDetails = escapeHtml(o.details || "لا توجد تفاصيل إضافية");
+        return `
+                    <div class="archive-item searchable-archive-item" data-search="${escapeHtml(o.id)} ${orderArea} ${orderDetails} ${dName} ${dPhone}">
+                        <div class="d-flex justify-content-between align-items-start w-100">
+                            <div>
+                                <span class="fw-black text-dark" style="font-size: 0.95rem;">#${escapeHtml(o.id)}</span>
+                            </div>
+                            <div class="text-end">
+                                <span class="fw-black text-success" style="font-size: 1.05rem;">${o.price} <small>د.ع</small></span>
+                                <div class="small text-muted mt-1" style="font-size: 0.7rem;"><i data-lucide="clock" size="10"></i> ${orderTime}</div>
+                            </div>
+                        </div>
+                        <div class="archive-details-box w-100 text-start" dir="rtl">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2" style="border-bottom: 1px dashed rgba(15,23,42,0.1);">
+                                <div class="fw-bold text-dark">
+                                    <i data-lucide="bike" size="12" style="color: var(--success);"></i> الكابتن: <span class="fw-black">${dName}</span>
+                                </div>
+                                ${isValidPhone ? `<a href="tel:${jss(dPhone)}" class="text-decoration-none d-flex align-items-center gap-1" style="background: #f0fdf4; color: #16a34a; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 0.75rem;"><i data-lucide="phone" size="12"></i> ${dPhone}</a>` : ''}
+                            </div>
+                            <div class="mb-2 fw-bold text-dark"><i data-lucide="map-pin" size="12" style="color: var(--accent);"></i> المنطقة: <span class="fw-normal">${orderArea}</span></div>
+                            <div class="fw-bold text-dark"><i data-lucide="info" size="12" style="color: var(--primary-blue);"></i> التفاصيل: <span class="fw-normal" style="user-select: text;">${orderDetails}</span></div>
+                        </div>
+                    </div>`;
+    }
+
+    function rebuildOrderLists() {
+        const activeFbOrders = lastOrdersSnapshot;
+        let newLiveOrders = [];
+        const todayISO = new Date().toISOString().split('T')[0];
+
+        globalLiveDebt = 0;
+        globalLiveCount = 0;
+
+        // ① المنتهي اليوم — خريطة بالمُعرّف تمنع الازدواج بين المصدرين
+        const doneToday = new Map();
+
+        Object.values(activeFbOrders).forEach(fbOrder => {
+            if (!fbOrder) return;
+            if (fbOrder.status === 'deleted') return;
+
+            if (fbOrder.status === 'completed' || fbOrder.status === 'مكتمل') {
+                const orderISO = new Date(fbOrder.timestamp).toISOString().split('T')[0];
+                if (orderISO === todayISO) {
+                    globalLiveCount++;
+                    let commStr = String(fbOrder.comm || '0');
+                    let payType = String(fbOrder.payType || '');
+                    let resComm = 0;
+                    if (!commStr.includes('شهري')) {
+                        if (commStr.includes('/')) {
+                            resComm = parseFloat(commStr.split('/')[1]) || 0;
+                        } else {
+                            let val = parseFloat(commStr) || 0;
+                            resComm = payType.includes("مناصفة") ? (val / 2) : val;
+                        }
+                    }
+                    globalLiveDebt += resComm;
+
+                    doneToday.set(String(fbOrder.id), {
+                        id: fbOrder.id, area: fbOrder.area, details: fbOrder.details,
+                        price: parseFloat(fbOrder.price) || 0,
+                        drv: fbOrder.driverPhone || "", ts: fbOrder.timestamp
+                    });
+                }
+            } else {
+                newLiveOrders.push({ id: fbOrder.id, status: fbOrder.status, driverPhone: fbOrder.driverPhone || "system_routing", timestamp: fbOrder.timestamp, area: fbOrder.area, readyForPickup: fbOrder.ready_for_pickup || false, photoUrl: fbOrder.photoUrl });
+            }
+        });
+
+        // ② المرآة — ما كنسه السيرفر إلى الأرشيف (st:'c' منجز · 'x' ملغى/منتهٍ)
+        const mir = mirrorToday[todayISO] || {};
+        Object.keys(mir).forEach(k => {
+            const m = mir[k];
+            if (!m || m.st !== 'c') return;
+            const id = String(m.id || k);
+            if (doneToday.has(id)) return;   // ما زال في active_orders — لا تكرّره
+            doneToday.set(id, {
+                id: id, area: m.area, details: m.details,
+                price: parseFloat(m.price) || 0, drv: m.drv || "", ts: m.ts
+            });
+        });
+
+        // ③ العرض
+        const rows = Array.from(doneToday.values()).sort((a, b) => new Date(b.ts) - new Date(a.ts));
+        let todaySalesTotal = 0, todayArchiveHtml = '';
+        rows.forEach(o => { todaySalesTotal += o.price; todayArchiveHtml += archiveRowHtml(o); });
+
+        newLiveOrders.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        liveActiveOrders = newLiveOrders; renderActiveOrdersUI();
+        try { window.updAreaLiveCount(); } catch (e) {}   // [V41-ب]
+
+        const routingIcon = document.getElementById('headerRoutingIcon');
+        const centerContainer = document.getElementById('headerCenterContainer');
+        if (routingIcon && centerContainer) {
+            if (liveActiveOrders.length > 0) {
+                routingIcon.classList.add('active');
+                centerContainer.classList.add('active');
+            } else {
+                routingIcon.classList.remove('active');
+                centerContainer.classList.remove('active');
+            }
+        }
+
+        // 🔢 [V41] عدّاد اليوم — كان مفقوداً تماماً فكان الكاشير يعدّ بإصبعه
+        const tc = document.getElementById('todayOrdersCount');
+        if (tc) tc.innerText = rows.length;
+        document.getElementById('todayTotalSales').innerHTML = `${todaySalesTotal} <small class="fs-6">د.ع</small>`;
+
+        if (lastArchiveHtml !== todayArchiveHtml) {
+            document.getElementById('todayArchiveItems').innerHTML = todayArchiveHtml || `<div class="text-center text-muted fw-bold py-4 small" style="font-size:0.8rem; background: rgba(255,255,255,0.4); border-radius: 20px;">لم تكتمل أي طلبات اليوم بعد.</div>`;
+            lastArchiveHtml = todayArchiveHtml;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        if (window.currentLedgerData) {
+            document.getElementById('statMonthOrders').innerText = (window.currentLedgerData.completed_orders || 0) + globalLiveCount;
+            document.getElementById('statUnpaid').innerText = (parseFloat(window.currentLedgerData.debt) || 0) + globalLiveDebt;
+        }
+    }
+
+    // دالة البحث الذكي داخل الأرشيف اليومي
+    window.filterArchiveOrders = function() {
+        const input = document.getElementById('searchArchiveInput').value.toLowerCase();
+        const items = document.querySelectorAll('.searchable-archive-item');
+        
+        items.forEach(item => {
+            const searchData = item.getAttribute('data-search').toLowerCase();
+            if (searchData.includes(input)) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    };
+
+    // 🔧[خ٥] الإلغاء بالحذف الفعلي (null) صار **ممنوعاً** بالقواعد الجديدة —
+    //   وكان أصلاً ثغرة محو الدين. الإلغاء الآن = status:'deleted' فيمرّ الطلب
+    //   الملغى بأرشيف الفجر كـ"ملغى" ويبقى قابلاً للتدقيق.
+    window.cancelOrderGrace = async function(orderId) {
+        if (!confirm("تأكيد الإلغاء؟")) return;
+        const card = document.getElementById(`order-${orderId}`);
+        if (card) { card.style.opacity = '0'; setTimeout(() => card.style.display = 'none', 300); }
+        actionBlacklist.push(String(orderId)); setTimeout(() => { actionBlacklist = actionBlacklist.filter(id => id !== String(orderId)); }, BLACKLIST_TTL_MS);
+        
+        await requireCloudAuth();
+        /* [V40] قياس في الظلّ: يُقيّم السيرفر الأمر ويُسجّل حكمه ولا يكتب
+           حرفاً. fire-and-forget داخل try — لا تُنتظَر فلا تستطيع تعليق
+           الإلغاء ولا تعطيله. المسار القديم أدناه هو المسؤول الوحيد. */
+        try {
+            httpsCallable(fns, 'orderCommand')({
+                opId: 'sh-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
+                orderId: String(orderId), command: 'CANCEL', shadow: true
+            }).then(r => { const v = (r && r.data && r.data.verdict) || '?';
+                           if (v !== 'allow') resTrack('shadow_reject', { orderId: orderId, reason: v }); })
+              .catch(() => {});
+        } catch (e) {}
+
+        update(ref(db, `active_orders/${orderId}`), {
+            status: 'deleted',
+            last_update: new Date().toISOString(),
+            cancelled_by: 'restaurant'
+        }).catch(() => {
+            if (card) { card.style.opacity = '1'; card.style.display = ''; } actionBlacklist = actionBlacklist.filter(id => id !== String(orderId));
+            alert("تعذّر الإلغاء — قد يكون الكابتن استلم الطلب بالفعل.");
+        });
+    };
+
+    window.markOrderReady = async function(orderId, btn) {
+        btn.disabled = true;
+        await requireCloudAuth();
+        update(ref(db, `active_orders/${orderId}`), { ready_for_pickup: true, ready_ts: new Date().toISOString() })
+            .then(() => { btn.classList.add('sent'); btn.innerHTML = `<i data-lucide="check" size="12"></i> جاهز`; if (typeof lucide !== 'undefined') lucide.createIcons({ root: btn.parentElement }); })
+            .catch(() => { btn.disabled = false; });
+    };
+
+    function renderActiveOrdersUI() {
+        let activeOrdersHtml = '';
+        liveActiveOrders.forEach(o => {
+            const { status, id: orderId, area: orderArea, driverPhone, timestamp: orderDateStr, readyForPickup } = o;
+            if (actionBlacklist.includes(String(orderId))) return;
+
+            const orderTime   = new Date(orderDateStr).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+            const hasDriver   = driverPhone && !["pending_driver","manual_pending","system_routing"].includes(driverPhone);
+            const isCancelable= !["picked_up","في الطريق"].includes(status);
+
+            let driverName = 'يبحث عن كابتن...'; let step = 1, fillWidth = "0%";
+            if (hasDriver) {
+                driverName = escapeHtml(driverDisplayName(driverPhone));
+                if (status === 'picked_up' || status === 'في الطريق') { step = 4; fillWidth = "100%"; }
+                else if (status === 'arrived_at_res') { step = 3; fillWidth = "66%"; }
+                else { step = 2; fillWidth = "33%"; }
+            }
+
+            const showReadyBtn = hasDriver && (status === 'accepted' || status === 'heading' || status === 'arrived_at_res');
+            const readyBtnHtml = showReadyBtn ? (readyForPickup ? `<span class="ready-pill"><i data-lucide="check-circle" size="10"></i> جاهز للاستلام</span>` : `<button class="btn-ready" onclick="markOrderReady('${sid(orderId)}', this)"><i data-lucide="package-check" size="14"></i> إبلاغ الكابتن بالجهوزية</button>`) : '';
+
+            const photoUrl = o.photoUrl || o.image; 
+            const imgBtnHtml = photoUrl ? `<button class="btn-call-mini" style="background:#e0f2fe; color:var(--primary-blue);" onclick="document.getElementById('fullReceiptImage').src='${jss(photoUrl)}'; document.getElementById('imageViewerModal').style.display='flex';" title="عرض الوصل"><i data-lucide="image" size="14"></i></button>` : '';
+
+            activeOrdersHtml += `
+            <div class="live-order-card" id="order-${sid(orderId)}">
+                <div class="order-header-row">
+                    <div>
+                        <span class="order-id-text">#${escapeHtml(orderId)}</span>
+                        <div class="order-time-text"><i data-lucide="clock" size="10"></i> ${escapeHtml(orderTime)}</div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        ${readyBtnHtml}
+                        ${isCancelable ? `<button class="btn-cancel-grace" onclick="cancelOrderGrace('${sid(orderId)}')">إلغاء</button>` : ''}
+                        ${imgBtnHtml}
+                        ${hasDriver ? `<button class="btn-call-mini" onclick="window.open('tel:${jss(driverPhone)}')"><i data-lucide="phone" size="14"></i></button>` : ''}
+                    </div>
+                </div>
+                <div class="order-details-row mt-2">
+                    <div class="detail-item"><i data-lucide="map-pin" size="14" style="color: var(--accent);"></i> ${escapeHtml(orderArea || 'غير محددة')}</div>
+                    <div class="detail-item"><i data-lucide="bike" size="14" style="color: var(--success);"></i> الكابتن: ${driverName}</div>
+                </div>
+                <div class="progress-tracker mt-3">
+                    <div class="progress-line"></div>
+                    <div class="progress-line-fill" style="width: ${fillWidth};"></div>
+                    <div class="progress-step ${step >= 1 ? (step === 1 ? 'current' : 'active') : ''}"><div class="progress-dot"><i data-lucide="radar" size="10"></i></div><span class="progress-label">بانتظار</span></div>
+                    <div class="progress-step ${step >= 2 ? (step === 2 ? 'current' : 'active') : ''}"><div class="progress-dot"><i data-lucide="truck" size="10"></i></div><span class="progress-label">متوجه</span></div>
+                    <div class="progress-step ${step >= 3 ? (step === 3 ? 'current' : 'active') : ''}"><div class="progress-dot"><i data-lucide="store" size="10"></i></div><span class="progress-label">بالمطعم</span></div>
+                    <div class="progress-step ${step >= 4 ? (step === 4 ? 'current' : 'active') : ''}"><div class="progress-dot"><i data-lucide="user" size="10"></i></div><span class="progress-label">بالطريق</span></div>
+                </div>
+            </div>`;
+        });
+
+        if (lastActiveHtml !== activeOrdersHtml) { document.getElementById('activeOrdersList').innerHTML = activeOrdersHtml || `<div class="text-center text-muted fw-bold py-4 small" style="font-size: 0.8rem; background: rgba(255,255,255,0.4); border-radius: 20px;"><i data-lucide="inbox" size="24" class="mb-2 opacity-50"></i><br>لا توجد طلبات نشطة حالياً.</div>`; lastActiveHtml = activeOrdersHtml; if (typeof lucide !== 'undefined') lucide.createIcons(); }
+    }
+
+    /* أُزيلت extractDataFromImageBg: التحليل انتقل إلى بوّابة الذكاء. */
+    /* ⬇️ [استعادة] معالج إرسال الاستمارة.
+       حُذف سهواً مع حذف extractDataFromImageBg — امتدّ الحذف إلى ما بعدها
+       فابتلعه. وبلا معالج تُرسَل الاستمارة أصلاً فتتحدّث الصفحة ولا يُرسَل
+       شيء. أُعيد كما كان حرفاً بحرف؛ فرع الصورة ينادي النسخة الجديدة. */
+    document.getElementById('orderForm').onsubmit = function(e) {
+        e.preventDefault();
+
+        const btn = document.getElementById('submitOrderBtn'); 
+        const originalBtnHtml = btn.innerHTML;
+
+        if (currentOrderMode === 'manual' || currentOrderMode === 'quick') {
+            let finalArea = document.getElementById('customerArea').value; 
+            let areaWithHint = finalArea;
+
+            if (Math.abs(regLat - 35.468) < 0.001 && Math.abs(regLng - 44.392) < 0.001) {
+                const s = JSON.parse(localStorage.getItem('hut_res_session') || '{}');
+                if (s.lat && s.lng) { regLat = parseFloat(s.lat); regLng = parseFloat(s.lng); } 
+                else { alert("⚠️ لم تصل إحداثيات مطعمك بعد — سجّل خروجاً ثم دخولاً، أو تواصل مع الإدارة لتحديث موقعك."); return; }
+            }
+
+            if (finalArea === "أخرى" || !finalArea) {
+                const cName  = document.getElementById('customAreaName').value.trim(); 
+                const cPrice = document.getElementById('customAreaPrice').value.trim();
+                if (!cName) return alert("يرجى تحديد المنطقة بدقة.");
+                areaWithHint = cPrice ? `${cName} (توصيل: ${cPrice})` : cName; 
+                finalArea = "أخرى"; 
+            } else if (myCustomPriceList[finalArea]) { 
+                areaWithHint = `${finalArea} (توصيل: ${myCustomPriceList[finalArea]})`; 
+            }
+
+            let finalPrice = 0;
+            let finalDetails = "";
+
+            if (currentOrderMode === 'manual') {
+                finalPrice = parseFloat(document.getElementById('orderPrice').value) || 0;
+                if (finalPrice === 0) return alert("الرجاء إدخال السعر الكلي.");
+                const rawCustPhone = document.getElementById('customerPhone').value.trim();
+                const { clean: cleanPhone } = window.normalizeCustomerPhone(rawCustPhone);
+                const custPhone = cleanPhone || rawCustPhone;
+                if (!custPhone) return alert("يرجى كتابة رقم الزبون المستلم.");
+                document.getElementById('customerPhone').value = custPhone;
+                const extra = document.getElementById('customerDetails').value.trim();
+                finalDetails = `الهاتف: ${custPhone} | ${extra}`;
+            } else {
+                if (finalArea === "أخرى") {
+                    finalPrice = parseFloat(document.getElementById('customAreaPrice').value.trim()) || 0;
+                } else {
+                    finalPrice = myCustomPriceList[finalArea] || 0; 
+                }
+                finalDetails = "⚡ طلب سريع (التفاصيل والفاتورة مع المطعم)";
+            }
+            
+            btn.innerHTML = `<div class="spinner-border spinner-border-sm me-1"></div> إرسال إلى الرادار...`; 
+            btn.disabled  = true;
+            finalizeOrderPlacement(finalDetails, "", finalPrice, areaWithHint, btn, originalBtnHtml);
+            
+        } else if (currentOrderMode === 'photo') {
+            if (!base64Receipt) return alert("يرجى التقاط صورة للوصل أولاً باستخدام الكاميرا.");
+            const base64Content = base64Receipt.split(',')[1];
+            const currentRes = currentResName; 
+            showSuccessMessage(`<div style="background: var(--success); width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);"><i data-lucide="check" size="24" color="white"></i></div><div class="fw-black" style="font-size: 1rem;">تم استلام الصورة! 🚀</div><div style="font-size: 0.75rem; opacity: 0.8; font-weight: 500; margin-top:4px;">تتم المعالجة بالخلفية وسيتم توجيهها للسائقين قريباً.</div>`);
+            processPhotoOrderBackgroundSafe(base64Content, currentRes);
+        }
+    };
+
+    /* 🧾 الوصل — صار سطرين.
+       كان يرفع الصورة للتخزين وينادي Gemini بالتوازي ثم يبني الطلب هنا.
+       كل ذلك انتقل إلى بوّابة الذكاء: الرفع والتحليل وبناء الطلب في مكان
+       واحد، بمفتاح محميّ، ومضمونٌ إتمامه ولو أُغلق التطبيق بعد الإرسال. */
+    async function processPhotoOrderBackgroundSafe(base64Content, resName) {
+        try {
+            await sendToAI({ kind: "receipt", data: base64Content, mime: "image/jpeg", resName: resName });
+        } catch (e) {
+            console.error("receipt intake failed (queued):", e && e.message);
+        }
+    }
+
+    async function finalizeOrderPlacement(details, imageUrl, price, area, btn, originalBtnHtml) {
+        try {
+            await finalizeOrderPlacementSilent(details, imageUrl, price, area, currentResName);
+            btn.innerHTML = originalBtnHtml; btn.disabled = false;
+            showSuccessMessage(`<div style="background: var(--success); width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);"><i data-lucide="check" size="24" color="white"></i></div><div class="fw-black" style="font-size: 1rem;">تم إرسال الطلب عبر خوادم PRO بنجاح! 🚀</div>`);
+        } catch (e) { 
+            btn.innerHTML = originalBtnHtml; btn.disabled = false; 
+            /* إلغاء التكرار قرارُ الكاشير نفسه — لا يُعرض كخطأ في النظام */
+            if (e && e.message === 'DUPLICATE_CANCELLED') return;
+
+            /* 🆕 [V41] الحالتان اللتان كانتا تسقطان في «خطأ غير متوقع» —
+               وهما بالضبط الحالتان اللتان يحتاج الكاشير أن يفهمهما. */
+            if (e && e.message === 'SERVER_DEDUP') {
+                alert('⚠️ لم يُنشأ طلب جديد.\n\n' +
+                      'هذا الإرسال طابق طلباً أُرسل قبل قليل، فأعاد النظام رقمه:\n' +
+                      '#' + (e.orderId || '—') + '\n\n' +
+                      'راجع «طلبات نشطة». وإن كان طلباً مختلفاً فعلاً فأعد الإرسال الآن.');
+                endAttemptCid();   // نيّة جديدة ⇒ مفتاح جديد ⇒ لن يُبتلع مرّتين
+                return;
+            }
+            if (e && e.message === 'SERVER_UNSURE') {
+                alert('⏳ انقطع الاتصال قبل أن يصل الردّ.\n\n' +
+                      'قد يكون الطلب أُنشئ وقد لا يكون.\n\n' +
+                      '✅ اضغط «إرسال» مرّة أخرى — الإعادة آمنة تماماً ولن تُنتج طلبين.');
+                return;
+            }
+            alert(e && e.message === 'NO_PHONE' ? "⚠️ رقم المنشأة غير متوفر — سجّل خروجاً ثم دخولاً." : "حدث خطأ غير متوقع."); 
+        }
+    }
+
+    async function finalizeOrderPlacementSilent(details, imageUrl, price, area, resName) {
+
+        const tsIso       = new Date().toISOString();
+        let safeResPhone  = regPhone; 
+        let safeComm = '0'; 
+        let safePayType = 'المطعم يدفع';
+        const sessionStr  = localStorage.getItem('hut_res_session');
+        
+        if (sessionStr) {
+            const sData = JSON.parse(sessionStr); 
+            if (!safeResPhone) safeResPhone = sData.phone;
+            safeComm = sData.comm || '0'; 
+            safePayType = sData.payType || 'المطعم يدفع';
+        }
+
+        // 🔧[خ٧] المفتاح الموحّد — يجب أن يساوي auth.uid حرفياً وإلا رفضت القواعد
+        const normResPhone = normalizeSystemPhone(safeResPhone);
+        // القاعدة الجديدة توجب resPhone == auth.uid — "غير متوفر" القديمة كانت
+        // ستُنشئ طلباً يتيماً مالياً؛ الآن نوقف الإرسال بدلها.
+        if (!normResPhone) throw new Error('NO_PHONE');
+
+        /* 🩹[خ٣٤] تصادم معرّفات الطلبات — العلّة الحقيقية لاختلاط هوية الطلبات!
+           كان: "HUT-" + الثواني فقط. فمطعمان يرسلان في الثانية نفسها يحصلان
+           على **المعرّف نفسه**، والثاني يكتب فوق الأول بـset() — فيضيع طلب،
+           وتختلط الحقول (اسم من طلب، هاتف وإحداثيات من آخر).
+           بحساب عيد الميلاد: في ساعة بـ300 طلب، احتمال التصادم ≈ 100%.
+           الحل: بصمة المطعم (آخر 4 أرقام) + ملي-ثانية + حرف عشوائي.
+           تبقى الصيغة "HUT-..." مقروءة ومتوافقة مع الواجهات والأرشيف كلها. */
+        const uniqueId = "HUT-" + Math.floor(Date.now() / 1000)
+                       + "-" + String(normResPhone).slice(-4)
+                       + String(Date.now() % 1000).padStart(3, "0")
+                       + Math.floor(Math.random() * 36).toString(36);
+
+        /* 🩹[خ٣٣] حزام أخير: لا نرسل اسماً لا يخصّ هذا الهاتف.
+           إن اختلف الاسم المحفوظ في الجلسة عن الاسم المرافق لهذا الهاتف،
+           نأخذ الاسم الحيّ (currentResName) الذي يُزامنه applyServerProfile
+           من السيرفر عند كل مصادقة. والمعقِّم في CF يختم الاسم الموثوق
+           نهائياً من restaurants_config — فلا يُنسب طلب لمطعم آخر أبداً. */
+        try {
+            const sName = String(currentResName || '').trim();
+            if (sName && String(resName || '').trim() !== sName) {
+                console.warn('🔄 تصحيح اسم الطلب قبل الإرسال: «' + resName + '» → «' + sName + '»');
+                resName = sName;
+            }
+        } catch (e) {}
+
+        /* ═══════════════════════════════════════════════════════════════════
+           🛡️ حارس التكرار للمسار المباشر (اليدوي و«الطلب السريع»)
+           ───────────────────────────────────────────────────────────────────
+           هذا المسار لا يمرّ ببوّابة الذكاء ولا بطابورها، بل يكتب set() مباشرةً
+           بمعرّف جديد في كل نداء. فحين يبدو للكاشير أن الإرسال فشل (بينما نجح
+           على السيرفر) ويضغط ثانيةً، يُنشأ سجلّان لطلبٍ واحد — وهما متطابقان
+           تماماً فيمرّان كل بوّابات الدمج ويقعان على كابتن واحد كبطاقتين، أو
+           على كابتنين عند باب المطعم نفسه.
+
+           و«الطلب السريع» بلا هاتف زبون أصلاً، فكشف التكرار في CF لا يملك عليه
+           مطابقة قوية. هنا نمنعه من المنبع: بصمة الطلب الأخير محفوظة، وأي
+           تكرار حرفيّ خلال ثلاث دقائق يُوقَف بسؤال صريح للكاشير.
+           ═══════════════════════════════════════════════════════════════════ */
+        /* ═══════════════════════════════════════════════════════════════════
+           🛡️ حارس التكرار — **للوضع اليدوي وحده** بعد [V41]
+           ───────────────────────────────────────────────────────────────────
+           في اليدوي للبصمة معنى: نفس هاتف الزبون + نفس السعر + نفس
+           التفاصيل خلال ٣ دقائق = خطأ شبه مؤكّد.
+
+           وفي «السريع» لا معنى لها إطلاقاً: التفاصيل نصّ ثابت والسعر
+           مشتقّ من المنطقة ⇒ عشرة طلبات مشروعة لحي واحد في الذروة كلها
+           بصمة واحدة ⇒ نافذة تحذير على كل طلب، وts يتجدّد مع كل قبول
+           فلا تنتهي النافذة أبداً ما دام الضغط مستمراً.
+
+           والضغط المزدوج — وهو الخطر الحقيقي هنا — مغطّى بـ btn.disabled.
+           وبدلاً من الاعتراض، يرى الكاشير عدّاد «طلبات نشطة لهذه المنطقة»
+           في قائمته فيراجع بنفسه.
+           ═══════════════════════════════════════════════════════════════════ */
+        if (currentOrderMode === 'manual') {
+        try {
+            const sig = [normResPhone, String(price), String(area).trim(), String(details).trim()].join('|');
+            const last = JSON.parse(sessionStorage.getItem('suf_last_order') || 'null');
+            if (last && last.sig === sig && (Date.now() - last.ts) < 3 * 60 * 1000) {
+                const mins = Math.max(1, Math.round((Date.now() - last.ts) / 60000));
+                const goOn = confirm(
+                    '⚠️ أرسلتَ طلباً مطابقاً تماماً قبل ' + mins + ' دقيقة.\n\n' +
+                    'نفس رقم الزبون · نفس المنطقة · نفس السعر\n\n' +
+                    'إن كان الأول قد وصل فسيذهب كابتنان لطلب واحد.\n' +
+                    'راجع قائمة طلباتك أولاً.\n\n' +
+                    'هل هذا طلب مختلف فعلاً؟');
+                if (!goOn) throw new Error('DUPLICATE_CANCELLED');
+            }
+            sessionStorage.setItem('suf_last_order', JSON.stringify({ sig: sig, ts: Date.now() }));
+        } catch (e) {
+            if (e && e.message === 'DUPLICATE_CANCELLED') throw e;
+        }
+        }
+
+        /* [V40] مُعرّف احتياطي — يُستعمل فقط إن سقطنا للمسار القديم أدناه. */
+
+        // 🔒 القواعد الجديدة ترفض الكتابة بلا مصادقة — نضمنها قبل set
+        const authed = await requireCloudAuth();
+        if (!authed) throw new Error('NO_AUTH');
+
+        // 📌 ملاحظة: comm/payType هنا للعرض الفوري فقط — مُعقِّم الطلبات في CF
+        //   (orderSanitizer) يدهسهما بالقيم الموثوقة من restaurants_config.
+        //   والقواعد توجب: status='pending_driver' و driverPhone='system_routing'
+        //   و timestamp موجوداً عند الإنشاء — كلها محققة أدناه.
+        window.__resPhone = normResPhone;   // [V40] للرصد
+
+        /* ═══════════════════════════════════════════════════════════════════
+           [V40] ① السيرفر أولاً. المُعرّف يولّده هو، فيسقط حقن JS من أصله،
+           وcid يضمن أن إعادة الإرسال لا تُنتج توأماً.
+           ═══════════════════════════════════════════════════════════════════ */
+        if (USE_SERVER_CREATE) {
+            let serverId = null, unsure = false;
+            try {
+                serverId = await createOrderOnServer({
+                    resPhone: normResPhone, details: details, area: area,
+                    price: price, photoUrl: imageUrl, restaurant: resName
+                });
+            } catch (e) {
+                /* ⚠️ [V41] SERVER_DEDUP **يجب** أن يمرّ للأعلى. لو عومل
+                   كفشل عادي لسقط إلى set() القديم أدناه وأنشأ توأماً
+                   حقيقياً — أي أن كشف الازدواج نفسه يصير مصدره! */
+                if (String(e && e.message) === 'SERVER_DEDUP') throw e;
+                if (String(e && e.message) === 'SERVER_UNSURE') unsure = true;
+                else serverId = null;
+            }
+
+            /* لا نسقط للمسار القديم هنا: قد يكون الطلب أُنشئ فعلاً على
+               السيرفر ولم يصلنا الردّ. إنشاء توأم أسوأ من طلب متأخّر.
+               وcid يجعل إعادة الضغط آمنة تماماً — نفس النيّة، نفس الطلب. */
+            if (unsure) throw new Error('SERVER_UNSURE');
+            if (serverId) return;                    // ✅ أُنشئ على السيرفر
+            /* serverId === null ⇒ تيقّنّا أن شيئاً لم يُنشأ ⇒ المسار القديم */
+        }
+
+        /* ② المسار القديم — يبقى كاملاً وبلا تغيير حرف واحد.
+           هذا هو ما يُحذف **آخر** شيء: لا قبل أن يقرأ الرصد صفر
+           create_fallback لأيام، ولا قبل نشر ".write": false. */
+        await set(ref(db, 'active_orders/' + uniqueId), {
+            id: uniqueId, restaurant: resName, area: area, details: details, status: "pending_driver",
+            driverPhone: "system_routing", price: price, timestamp: tsIso, photoUrl: imageUrl,
+            last_update: tsIso, resPhone: normResPhone, resLat: regLat || 0, resLng: regLng || 0,
+            comm: safeComm, payType: safePayType, is_sovereign: false, ready_for_pickup: false
+        });
+        resTrack('create_legacy', { orderId: uniqueId });
+
+        // 🔧 أُزيل نداء NEW_ORDER إلى GAS — كان معالجه فارغاً ({success:true})
+        //   ولا يفعل شيئاً سوى استهلاك حصة السكربت.
+    }
+
+    function showSuccessMessage(customHTML) {
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
+        
+        document.getElementById('orderStatusBox').classList.remove('hidden-section');
+        document.getElementById('successToastContent').innerHTML = customHTML;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        
+        document.getElementById('customerPhone').value = ""; document.getElementById('customerDetails').value = "";
+        document.getElementById('orderPrice').value = ""; document.getElementById('customAreaName').value = ""; document.getElementById('customAreaPrice').value = "";
+        document.getElementById('customerPhoneWrap').classList.remove('cleaned'); document.getElementById('priceHint').classList.add('hidden-section');
+        document.getElementById('customerArea').value = ""; document.getElementById('areaDisplayInput').value = ""; document.getElementById('customAreaSection').classList.add('hidden-section');
+        
+        window.removePhoto(); clearDraft();
+        setTimeout(() => document.getElementById('orderStatusBox').classList.add('hidden-section'), 6000);   /* [V41-ج] كان 4500 — تختفي رسالة النجاح وشريط التراجع ما زال يعدّ */
+    }
+
+    // نظام الرسائل الإنسانية الذكي
+    function showFriendlyMessage() {
+        const banner = document.getElementById('friendlyMessageBanner');
+        const textEl = document.getElementById('friendlyText');
+        const iconEl = document.getElementById('friendlyIcon');
+        
+        const hour = new Date().getHours();
+        const month = new Date().getMonth() + 1; // 1-12
+        const isSummer = month >= 6 && month <= 9;
+        const isWinter = month === 12 || month <= 2;
+        
+        let messages = [];
+        let icon = "🌤️";
+
+        // رسائل الصباح (من 6 صباحاً إلى 3 عصراً)
+        if (hour >= 6 && hour < 15) {
+            icon = isSummer ? "🔥" : (isWinter ? "🌧️" : "☕");
+            messages = [
+                "صباح الخير! بداية يوم جديد ورزق وفير إن شاء الله. 🤍",
+                "الكباتن هم شركاء النجاح، استقبلوهم بابتسامة لتسهيل يومهم ويومكم. 🤝",
+                isSummer ? "الجو حار جداً اليوم، الكباتن يبذلون جهداً مضاعفاً، كلمة طيبة أو قدح ماء بارد يصنع فارقاً كبيراً! 🧊" : "صباح الهمة!",
+                isWinter ? "صباح الخير.. الأجواء باردة، تجهيز الطلب بسرعة يساعد الكابتن على توصيله حاراً للزبون ويريحه من الوقوف بالبرد. 🧣" : "يوم موفق!"
+            ];
+        } 
+        // رسائل المساء والليل (من 3 عصراً فما فوق)
+        else {
+            icon = "🌙";
+            messages = [
+                "مساء الخير! نحن في أوقات الذروة، التعاون وسرعة التجهيز يصنعان تقييماً ممتازاً لمطعمكم. 🌟",
+                "أبطال التوصيل في الشوارع الآن لخدمة زبائنكم، شكراً لتعاونكم المستمر معهم. 🛵",
+                "نظام PRO السحابي يراقب الأداء لضمان وصول طلباتكم بأسرع وقت. عمل موفق!"
+            ];
+        }
+
+        // اختيار رسالة عشوائية من القائمة المناسبة
+        const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+        textEl.innerText = randomMsg;
+        iconEl.innerText = icon;
+        
+        banner.classList.remove('hidden-section');
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       🎙️ ميزة الرسالة الصوتية — تسجيل + تحليل ذكي + إرسال فوري
+       تعمل بمنطق المسح الذكي للوصل تماماً (بلا مراجعة).
+    ════════════════════════════════════════════════════════════ */
+    /* [V41-ج] نُقل إلى هنا: resetVoiceUI تكتبه وهي معرَّفة قبل سطر let
+       الأصلي — تعمل اليوم لأنها لا تُنادى إلا بعد تقييم الوحدة، لكن أي
+       استدعاء مبكر مستقبلاً كان سيرمي TDZ. */
+    let _voiceCancelArmed = false;
+    let voiceMediaRecorder = null;
+    let voiceChunks = [];
+    let voiceStream = null;
+    let voiceMimeType = 'audio/webm';
+        let voiceTimerInterval = null;
+        let voiceStartTime = 0;
+        let voiceIsRecording = false;
+        let voiceSubmissionPending = false;
+        let activeVoicePayload = null;
+        let activeVoiceRetryTimer = null;
+        const VOICE_ACTIVE_KEY = 'pro_active_voice_order';
+
+    // اختيار نوع صوت مدعوم (توافق Android/iOS)
+        function pickSupportedAudioMime() {
+            const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+            if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return 'audio/webm';
+            for (const c of candidates) {
+                if (MediaRecorder.isTypeSupported(c)) return c;
+            }
+            return 'audio/webm';
+        }
+
+        function saveActiveVoicePayload() {
+            try {
+                if (activeVoicePayload) localStorage.setItem(VOICE_ACTIVE_KEY, JSON.stringify(activeVoicePayload));
+                else localStorage.removeItem(VOICE_ACTIVE_KEY);
+            } catch (e) {}
+        }
+
+        function restoreActiveVoicePayload() {
+            if (activeVoicePayload) return activeVoicePayload;
+            try {
+                const saved = JSON.parse(localStorage.getItem(VOICE_ACTIVE_KEY) || 'null');
+                if (saved && saved.payload && saved.payload.kind === 'voice') activeVoicePayload = saved;
+            } catch (e) {}
+            return activeVoicePayload;
+        }
+
+        function setVoiceWaitingUI(message) {
+            const btn = document.getElementById('voiceBtn');
+            const icon = document.getElementById('voiceIcon');
+            const label = document.getElementById('voiceLabel');
+            const hint = document.getElementById('voiceHint');
+            if (!btn) return;
+            btn.classList.remove('recording');
+            btn.classList.add('processing');
+            icon.innerHTML = `<div class="spinner-border" role="status" style="width:2rem;height:2rem;"></div>`;
+            label.textContent = 'يُرسل الطلب الأول...';
+            hint.innerHTML = message || 'يجري تحليل التسجيل وإنشاء طلب واحد للكابتن تلقائياً.';
+        }
+
+        function clearActiveVoicePayload() {
+            if (activeVoiceRetryTimer) { clearTimeout(activeVoiceRetryTimer); activeVoiceRetryTimer = null; }
+            activeVoicePayload = null;
+            voiceSubmissionPending = false;
+            saveActiveVoicePayload();
+        }
+
+        async function retryActiveVoiceOrder() {
+            const active = restoreActiveVoicePayload();
+            if (!active || voiceSubmissionPending) return;
+            voiceSubmissionPending = true;
+            setVoiceWaitingUI('يجري تحليل التسجيل وإنشاء طلب واحد ثم إرساله تلقائياً للكابتن.');
+            try {
+                const result = await sendToAI(active.payload, { queueOnFail: false });
+                if (!result || result.created !== true || !result.orderId) throw new Error('voice_order_not_created');
+                clearActiveVoicePayload();
+                showSuccessMessage(`<div style="background: var(--success); width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;"><i data-lucide="mic" style="color:#fff;width:26px;height:26px;"></i></div>
+                    <div style="font-weight:900;font-size:1.05rem;">تم إنشاء الطلب الصوتي ✅</div>
+                    <div style="font-size:.85rem;opacity:.8;margin-top:4px;">أُرسل الطلب نفسه للتوزيع التلقائي على الكابتن</div>`);
+                resetVoiceUI();
+            } catch (error) {
+                const reason = String(error && error.message || error);
+                if (reason.includes('voice_order_incomplete')) {
+                    clearActiveVoicePayload();
+                    resetVoiceUI();
+                    alert('لم يكتمل فهم السعر أو المنطقة أو العنوان. سجّل الطلب من جديد بوضوح.');
+                    return;
+                }
+                active.tries = (active.tries || 0) + 1;
+                saveActiveVoicePayload();
+                voiceSubmissionPending = false;
+                const hint = document.getElementById('voiceHint');
+                if (hint) hint.innerHTML = active.tries < 6
+                    ? 'تعذر تأكيد الطلب الآن؛ ستتم إعادة محاولة <b>نفس التسجيل</b> تلقائياً.'
+                    : 'تعذر إرسال الطلب. اضغط الزر لإعادة محاولة <b>نفس التسجيل</b> فقط.';
+                if (active.tries < 6) activeVoiceRetryTimer = setTimeout(retryActiveVoiceOrder, 8000);
+            }
+        }
+
+        function hasNativeVoiceRecorder() {
+            return typeof window.AndroidVoice !== 'undefined'
+                && typeof window.AndroidVoice.startRecording === 'function';
+        }
+
+        function showVoiceRecordingUI() {
+            voiceIsRecording = true;
+            voiceStartTime = Date.now();
+            const btn = document.getElementById('voiceBtn');
+            const icon = document.getElementById('voiceIcon');
+            const label = document.getElementById('voiceLabel');
+            const hint = document.getElementById('voiceHint');
+            btn.classList.add('recording');
+            icon.innerHTML = `<div class="voice-wave"><span></span><span></span><span></span><span></span><span></span></div>`;
+            label.textContent = 'يسجّل... ارفع إصبعك للإرسال';
+            hint.innerHTML = 'تكلّم الآن بوضوح 🎙️';
+            if (navigator.vibrate) navigator.vibrate(40);
+            const timerEl = document.getElementById('voiceTimer');
+            voiceTimerInterval = setInterval(() => {
+                const sec = Math.floor((Date.now() - voiceStartTime) / 1000);
+                const m = String(Math.floor(sec / 60)).padStart(2, '0');
+                const s = String(sec % 60).padStart(2, '0');
+                timerEl.textContent = `${m}:${s}`;
+                if (sec >= 60) stopVoiceRecording();
+            }, 250);
+        }
+
+        function showVoiceProcessingUI() {
+            const btn = document.getElementById('voiceBtn');
+            const icon = document.getElementById('voiceIcon');
+            const label = document.getElementById('voiceLabel');
+            const hint = document.getElementById('voiceHint');
+            const timerEl = document.getElementById('voiceTimer');
+            btn.classList.remove('recording');
+            btn.classList.add('processing');
+            icon.innerHTML = `<div class="spinner-border" role="status" style="width:2rem;height:2rem;"></div>`;
+            label.textContent = 'يُحلّل الطلب...';
+            hint.innerHTML = 'ذكاء PRO يستمع ويستخرج تفاصيل الطلب ✨';
+            timerEl.textContent = '';
+        }
+
+        async function handleVoicePayload(base64Content, mimeType) {
+            if (!base64Content) {
+                alert('تعذّر قراءة التسجيل، حاول مجدداً.');
+                resetVoiceUI();
+                return;
+            }
+            showVoiceProcessingUI();
+            await processVoiceOrder(base64Content, String(mimeType || 'audio/mp4').split(';')[0], currentResName);
+        }
+
+        window.onNativeVoiceRecordingStarted = function() {};
+        window.onNativeVoiceRecordingReady = function(base64Content, mimeType) {
+            handleVoicePayload(base64Content, mimeType);
+        };
+        window.onNativeVoiceRecordingError = function(message) {
+            voiceIsRecording = false;
+            if (voiceTimerInterval) { clearInterval(voiceTimerInterval); voiceTimerInterval = null; }
+            resetVoiceUI();
+            alert(message || 'تعذر تسجيل الصوت.');
+        };
+
+        async function startVoiceRecording() {
+            if (voiceSubmissionPending) return;
+            if (restoreActiveVoicePayload()) {
+                retryActiveVoiceOrder();
+                return;
+            }
+            if (voiceIsRecording) return;
+        if (hasNativeVoiceRecorder()) {
+            voiceMimeType = 'audio/mp4';
+            showVoiceRecordingUI();
+            window.AndroidVoice.startRecording();
+            return;
+        }
+        try {
+            /* 🎚️ الكلام يكفيه أحادي بـ16kHz. الافتراضي غالباً ستيريو 48kHz —
+               أي حِمل أضعافاً بلا فائدة، ويُحسّ على شبكة خلوية. */
+            voiceStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    channelCount: 1,
+                    sampleRate: 16000,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            }).catch(() => navigator.mediaDevices.getUserMedia({ audio: true }));
+        } catch (e) {
+            alert("⚠️ لا يمكن الوصول للميكروفون. تأكد من منح إذن التسجيل للتطبيق من إعدادات المتصفح.");
+            return;
+        }
+        voiceMimeType = pickSupportedAudioMime();
+        voiceChunks = [];
+        try {
+            voiceMediaRecorder = new MediaRecorder(voiceStream, { mimeType: voiceMimeType, audioBitsPerSecond: 24000 });
+        } catch (e) {
+            // بعض الأجهزة ترفض تمرير mimeType — نتركه افتراضياً
+            voiceMediaRecorder = new MediaRecorder(voiceStream);
+            voiceMimeType = voiceMediaRecorder.mimeType || 'audio/webm';
+        }
+
+        voiceMediaRecorder.ondataavailable = (ev) => {
+            if (ev.data && ev.data.size > 0) voiceChunks.push(ev.data);
+        };
+        voiceMediaRecorder.onstop = () => {
+            // إيقاف مسارات الميكروفون (إطفاء المؤشر الأحمر)
+            if (voiceStream) { voiceStream.getTracks().forEach(t => t.stop()); voiceStream = null; }
+            const blob = new Blob(voiceChunks, { type: voiceMimeType });
+            handleVoiceBlob(blob);
+        };
+
+        voiceMediaRecorder.start();
+        showVoiceRecordingUI();
+    }
+
+    function stopVoiceRecording() {
+        if (!voiceIsRecording) return;
+        voiceIsRecording = false;
+        if (voiceTimerInterval) { clearInterval(voiceTimerInterval); voiceTimerInterval = null; }
+
+        const recordedSec = (Date.now() - voiceStartTime) / 1000;
+
+        // تسجيل قصير جداً = إلغاء (ضغطة خاطئة)
+        if (recordedSec < 0.6) {
+            if (hasNativeVoiceRecorder()) {
+                try { window.AndroidVoice.cancelRecording(); } catch (e) {}
+                resetVoiceUI();
+                document.getElementById('voiceHint').innerHTML = '⚠️ التسجيل قصير جداً، اضغط مطولاً وتكلّم.';
+                return;
+            }
+            if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+                voiceMediaRecorder.onstop = null; // لا نعالج التسجيل الملغى
+                try { voiceMediaRecorder.stop(); } catch(e) {}
+            }
+            if (voiceStream) { voiceStream.getTracks().forEach(t => t.stop()); voiceStream = null; }
+            resetVoiceUI();
+            document.getElementById('voiceHint').innerHTML = '⚠️ التسجيل قصير جداً، اضغط مطولاً وتكلّم.';
+            setTimeout(() => { if (currentOrderMode === 'voice') resetVoiceUI(); }, 2000);
+            return;
+        }
+
+        if (hasNativeVoiceRecorder()) {
+            try { window.AndroidVoice.stopRecording(); } catch (e) { window.onNativeVoiceRecordingError('تعذر إيقاف التسجيل.'); }
+            if (navigator.vibrate) navigator.vibrate([30, 30]);
+            return;
+        }
+
+        if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+            try { voiceMediaRecorder.stop(); } catch(e) {}
+        }
+        if (navigator.vibrate) navigator.vibrate([30, 30]);
+    }
+
+    // تحويل Blob إلى base64 ثم تحليل وإرسال (مثل الوصل)
+    function handleVoiceBlob(blob) {
+        showVoiceProcessingUI();
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const dataUrl = reader.result;
+            const base64Content = (typeof dataUrl === 'string' && dataUrl.includes(',')) ? dataUrl.split(',')[1] : '';
+            await handleVoicePayload(base64Content, voiceMimeType);
+        };
+        reader.readAsDataURL(blob);
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       🎙️ الصوت — هنا كان البطء المحسوس كلّه.
+       ──────────────────────────────────────────────────────────────────────
+       كان الترتيب: سجّل ← **انتظر Gemini** ← أظهر النجاح ← أرسل الطلب.
+       والكاشير لا يراجع شيئاً في هذا المسار — يُرسَل الطلب بما فهمه الذكاء
+       مهما كان. فالانتظار كان محض هدر: ثوانٍ يقفها الكاشير بلا فائدة.
+
+       صار: سجّل ← **نجاح فوري** ← ينتقل للزبون التالي، والتحليل وبناء
+       الطلب يجريان في السيرفر. وأي فشل إرسال يُحفظ في طابور يُعاد تلقائياً.
+       ══════════════════════════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════════════════════════════
+       ↩︎ [V41-ب] مهلة التراجع — الطلب الصوتي لم يعد بلا رجعة
+       ───────────────────────────────────────────────────────────────────────
+       كان: رفع الإصبع ⇒ إرسال فوري. والمخرج الوحيد شرطٌ أعمى (أقلّ من ٠.٦
+       ثانية) — أي أن الإلغاء ممكن فقط لمن لم يتكلّم أصلاً. ومن أخطأ في
+       نطق العنوان بعد ثماني ثوانٍ كان عليه إرسال الطلب ثم حذفه.
+
+       الآن: النجاح يبقى فورياً (فلسفة السرعة صحيحة)، والحمولة تُحفظ في
+       الطابور بمهلة VOICE_UNDO_MS. فإن ضغط «تراجع» حُذفت قبل أن تُرسَل،
+       وإن لم يفعل خرجت وحدها. ولو أُغلق التطبيق في الأثناء فهي في
+       localStorage — تخرج عند أول تفريغ، فلا يضيع طلب.
+       ═══════════════════════════════════════════════════════════════════════ */
+    const VOICE_UNDO_MS = 6000;
+    let _undoTimer = null;
+
+    function showUndoBar(id) {
+        const box = document.getElementById('voiceUndoBar');
+        const cnt = document.getElementById('voiceUndoCount');
+        if (!box) return;
+        box.style.display = 'flex';
+        box.dataset.qid = id;
+        let left = Math.round(VOICE_UNDO_MS / 1000);
+        if (cnt) cnt.textContent = left;
+        if (_undoTimer) clearInterval(_undoTimer);
+        _undoTimer = setInterval(() => {
+            left--;
+            if (cnt) cnt.textContent = left > 0 ? left : '';
+            if (left <= 0) { clearInterval(_undoTimer); _undoTimer = null; box.style.display = 'none'; flushAIQueue(); }
+        }, 1000);
+    }
+
+    window.undoVoiceOrder = function() {
+        const box = document.getElementById('voiceUndoBar');
+        if (!box) return;
+        const id = box.dataset.qid;
+        if (_undoTimer) { clearInterval(_undoTimer); _undoTimer = null; }
+        box.style.display = 'none';
+        const removed = cancelQueuedAI(id);
+        resTrack('voice_undo', { reason: removed ? 'ok' : 'too_late' });
+        if (navigator.vibrate) navigator.vibrate(60);
+        document.getElementById('orderStatusBox').classList.add('hidden-section');
+        const hint = document.getElementById('voiceHint');
+        if (hint) hint.innerHTML = removed
+            ? '↩︎ أُلغي الطلب الصوتي — لم يُرسَل. سجّل من جديد.'
+            : '⚠️ فات الأوان، الطلب أُرسل بالفعل — ألغِه من قائمة طلباتك.';
+    };
+
+    async function processVoiceOrder(base64Content, mimeType, resName) {
+        if (restoreActiveVoicePayload()) {
+            retryActiveVoiceOrder();
+            return;
+        }
+        const cid = (window.crypto && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : ('voice-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+        activeVoicePayload = {
+            payload: { kind: "voice", data: base64Content, mime: mimeType, resName: resName, cid },
+            tries: 0,
+            createdAt: Date.now()
+        };
+        saveActiveVoicePayload();
+        retryActiveVoiceOrder();
+    }
+
+    function resetVoiceUI() {
+        const btn = document.getElementById('voiceBtn');
+        const icon = document.getElementById('voiceIcon');
+        const label = document.getElementById('voiceLabel');
+        const hint = document.getElementById('voiceHint');
+        const timerEl = document.getElementById('voiceTimer');
+        if (!btn) return;
+        btn.classList.remove('recording', 'processing');
+        btn.style.background = '';           // [V41-ب] أثر «أفلت للإلغاء»
+        _voiceCancelArmed = false;
+        icon.textContent = '🎙️';
+        label.textContent = 'اضغط مطولاً وتكلّم';
+        hint.innerHTML = 'اضغط الزر باستمرار وقل تفاصيل الطلب:<br><b>المنطقة، السعر، رقم الزبون</b><br>ثم ارفع إصبعك ليُرسَل ويُحلَّل تلقائياً ✨';
+        timerEl.textContent = '';
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       ⬆️ [V41-ب] اسحب لأعلى للإلغاء — نمط مألوف لكل كاشير من الواتساب
+       صفر ثانية إضافية على المسار السليم: من لم يسحب لا يشعر بشيء.
+       ═══════════════════════════════════════════════════════════════════════ */
+    const VOICE_CANCEL_PX = 60;
+    let _voiceStartY = 0;
+
+    function armVoiceCancel(on) {
+        if (_voiceCancelArmed === on) return;
+        _voiceCancelArmed = on;
+        const btn = document.getElementById('voiceBtn');
+        const label = document.getElementById('voiceLabel');
+        const hint = document.getElementById('voiceHint');
+        if (!btn) return;
+        if (on) {
+            btn.style.background = '#64748b';
+            if (label) label.textContent = 'أفلت للإلغاء ✕';
+            if (hint) hint.innerHTML = '<b style="color:#ef4444;">✕ سيُلغى التسجيل عند رفع إصبعك</b>';
+            if (navigator.vibrate) navigator.vibrate(30);
+        } else {
+            btn.style.background = '';
+            if (label) label.textContent = 'يسجّل... ارفع إصبعك للإرسال';
+            if (hint) hint.innerHTML = 'تكلّم الآن بوضوح 🎙️';
+        }
+    }
+
+    function discardVoiceRecording() {
+        if (!voiceIsRecording) return;
+        voiceIsRecording = false;
+        if (voiceTimerInterval) { clearInterval(voiceTimerInterval); voiceTimerInterval = null; }
+        if (hasNativeVoiceRecorder()) {
+            try { window.AndroidVoice.cancelRecording(); } catch (e) {}
+        }
+        if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+            voiceMediaRecorder.onstop = null;          // لا تُعالَج الحمولة الملغاة
+            try { voiceMediaRecorder.stop(); } catch (e) {}
+        }
+        if (voiceStream) { voiceStream.getTracks().forEach(t => t.stop()); voiceStream = null; }
+        voiceChunks = [];
+        armVoiceCancel(false);
+        resetVoiceUI();
+        const hint = document.getElementById('voiceHint');
+        if (hint) hint.innerHTML = '✕ أُلغي التسجيل — لم يُرسَل شيء.';
+        resTrack('voice_slide_cancel', {});
+        if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+    }
+
+    function bindVoiceButton() {
+        const btn = document.getElementById('voiceBtn');
+        if (!btn) return;
+
+        // اللمس (الجوال)
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            _voiceStartY = (e.touches && e.touches[0]) ? e.touches[0].clientY : 0;
+            armVoiceCancel(false);
+            startVoiceRecording();
+        }, { passive: false });
+
+        btn.addEventListener('touchmove', (e) => {
+            if (!voiceIsRecording) return;
+            const y = (e.touches && e.touches[0]) ? e.touches[0].clientY : 0;
+            armVoiceCancel((_voiceStartY - y) > VOICE_CANCEL_PX);
+        }, { passive: true });
+
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (_voiceCancelArmed) { discardVoiceRecording(); return; }
+            stopVoiceRecording();
+        }, { passive: false });
+
+        btn.addEventListener('touchcancel', (e) => { e.preventDefault(); discardVoiceRecording(); }, { passive: false });
+
+        // الماوس (سطح المكتب — للاختبار)
+        btn.addEventListener('mousedown', (e) => { e.preventDefault(); _voiceStartY = e.clientY; armVoiceCancel(false); startVoiceRecording(); });
+        btn.addEventListener('mousemove', (e) => { if (voiceIsRecording) armVoiceCancel((_voiceStartY - e.clientY) > VOICE_CANCEL_PX); });
+        btn.addEventListener('mouseup', (e) => { e.preventDefault(); if (_voiceCancelArmed) { discardVoiceRecording(); return; } stopVoiceRecording(); });
+        btn.addEventListener('mouseleave', () => { if (voiceIsRecording) { if (_voiceCancelArmed) discardVoiceRecording(); else stopVoiceRecording(); } });
+    }
+
+    // نربط الزر بعد تحميل الصفحة
+    bindVoiceButton();
+    setTimeout(() => { if (restoreActiveVoicePayload()) retryActiveVoiceOrder(); }, 4500);
+</script>
+</body>
+</html>
