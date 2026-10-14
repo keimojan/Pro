@@ -2543,6 +2543,17 @@
             if (typeof lucide !== 'undefined') lucide.createIcons();
         }
 
+        // 📅 [اشتراك شهري] الحصة اليومية = المبلغ الشهري ÷ 30 — تُضاف لخانة العمولة
+        // مثال: "شهري 30000" ← 1000 د.ع يومياً (تُحسب مرة واحدة، لا تتأثر بعدد الطلبات)
+        try {
+            const _sess = JSON.parse(localStorage.getItem('hut_res_session') || '{}');
+            const _commSess = String(_sess.comm || '');
+            if (_commSess.includes('شهري')) {
+                const _mAmt = parseFloat(_commSess.replace(/[^\d.]/g, '')) || 0;
+                if (_mAmt > 0) globalLiveDebt += Math.round(_mAmt / 30);
+            }
+        } catch (e) {}
+
         if (window.currentLedgerData) {
             document.getElementById('statMonthOrders').innerText = (window.currentLedgerData.completed_orders || 0) + globalLiveCount;
             document.getElementById('statUnpaid').innerText = (parseFloat(window.currentLedgerData.debt) || 0) + globalLiveDebt;
