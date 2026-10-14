@@ -14,7 +14,7 @@
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "./pro_logo.png",
+      "src": "./pro_logo_192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
