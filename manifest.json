@@ -1,0 +1,39 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "PRO Driver",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "PRO Driver",
+  "start_url": "/",
+  "theme_color": "#4169E1",
+  "icons": [
+    {
+      "src": "https://keimojan.github.io/Pro/pro_logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "isSquare": true,
+      "isPng": true,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 512,
+      "is512x512": true,
+      "is256x256": false,
+      "is192x192": false
+    },
+    {
+      "src": "https://keimojan.github.io/Pro/pro_logo_192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "isSquare": true,
+      "isPng": true,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 192,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": true
+    }
+  ]
+}
