@@ -1617,7 +1617,7 @@
         if (pickerMap) { setTimeout(() => pickerMap.invalidateSize(), 500); return; }
         pickerMap = L.map('pickerMap', { zoomControl: false }).setView([regLat, regLng], 14);
         L.control.zoom({ position: 'bottomleft' }).addTo(pickerMap);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(pickerMap);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri &copy; OpenStreetMap contributors' }).addTo(pickerMap);
         pickerMap.on('move', function () { 
             regLat = pickerMap.getCenter().lat;
             regLng = pickerMap.getCenter().lng; 
