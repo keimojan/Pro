@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.1-Heal";
+  const CURRENT_APP_VERSION = "16.2-NativePulse";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -1419,9 +1419,13 @@ document.addEventListener('contextmenu',e=>e.preventDefault());
    ══════════════════════════════════════════════════════════════════════ */
 function pushTokenToNative(tok){
   try{
-    if(tok && window.AndroidRadar && typeof AndroidRadar.setAuthToken==='function'){
-      AndroidRadar.setAuthToken(String(tok));
-    }
+    if(!window.AndroidRadar || typeof AndroidRadar.setAuthToken!=='function')return;
+    /* [16.2] النبضة الأصلية تحتاج توكن الهوية (ID token) — التوكن المخصص وحده
+       لا يصلح لكتابات REST. إن كانت الجلسة حيّة ندفع ID token الطازج،
+       وإلا ندفع ما وصلنا كما كان السلوك القديم. */
+    const cu=auth&&auth.currentUser;
+    if(cu){ cu.getIdToken().then(idt=>{ try{ AndroidRadar.setAuthToken(String(idt)); }catch(e){} }).catch(()=>{ if(tok)AndroidRadar.setAuthToken(String(tok)); }); }
+    else if(tok){ AndroidRadar.setAuthToken(String(tok)); }
   }catch(e){}
 }
 
@@ -1728,6 +1732,7 @@ function onLogin(d,phone,pass){
     localStorage.setItem('suf_phone',phone); setPass(pass);
     if(d.firebase_token)signInWithCustomToken(auth,d.firebase_token).then(()=>{pushTokenToNative(d.firebase_token);schedTok(phone,pass);}).catch(()=>{});
     try{if(window.AndroidRadar&&AndroidRadar.subscribeToDriverTopic)AndroidRadar.subscribeToDriverTopic(phone);}catch(e){}
+    try{if(window.AndroidRadar&&AndroidRadar.setDriverPhone)AndroidRadar.setDriverPhone(phone);}catch(e){} /* [16.2] رقم السائق للنبضة الأصلية */
     showDash(); document.getElementById('onlineTog').checked=false; toggleOnline();
   } else if(d.status==='banned'){alert('حساب محظور.');location.reload();}
   else if(d.status==='pending'||d.status==='waiting'){localStorage.setItem('suf_pending',phone);sessionStorage.setItem('suf_pend_pass',btoa(pass));showWait();}
@@ -1760,6 +1765,7 @@ window.checkWait=function(manual){
         drv={phone,name:d.name,shiftHours:d.shift||10,ts:Date.now()};
         localStorage.setItem('suf_session',JSON.stringify(drv)); setPass(pass);
         if(d.firebase_token)signInWithCustomToken(auth,d.firebase_token).then(()=>{pushTokenToNative(d.firebase_token);schedTok(phone,pass);}).catch(()=>{});
+        try{if(window.AndroidRadar&&AndroidRadar.setDriverPhone)AndroidRadar.setDriverPhone(phone);}catch(e){} /* [16.2] رقم السائق للنبضة الأصلية */
         play('welcome'); document.getElementById('waitBox').classList.add('dn'); showDash();
       } else if(d.status==='banned'){clearInterval(waitTimer);localStorage.removeItem('suf_pending');alert('حسابك محظور.');location.reload();}
       else if(d.success===false&&manual){alert('🛑 السيرفر رفض الطلب: '+(d.msg||''));}
@@ -2020,6 +2026,10 @@ function paintToggle(on){
      20 ث بلا طلب) وتُلغي القديم أولاً. ولا نُنشئ مؤقّتاً بيدنا. */
   if(on){ adjustHB(); awake(); }
   else  { if(hbTimer){ clearInterval(hbTimer); hbTimer=null; } unawake(); }
+  /* [16.2] النبضة الأصلية تتبع قرار الكابتن من هنا — نقطة الاختناق الوحيدة
+     لكل تغييرات التوفّر (مفتاح، مرآة، شفاء). النبضة تؤكد «متاح» فقط
+     ولا تكتب «استراحة» أبداً بنفسها. */
+  try{ if(window.AndroidRadar&&typeof AndroidRadar.setPresenceActive==='function') AndroidRadar.setPresenceActive(!!on); }catch(e){}
 }
 
 function listenMyStatus(){
