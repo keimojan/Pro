@@ -2028,6 +2028,35 @@ function listenMyStatus(){
     const on = String(snap.val()||'') === 'active';
     if(_mirrorOn) return;                       // نحن من غيّرها للتوّ
     if(on === isOnline) return;                 // لا تغيير
+    /* ═══════════════════════════════════════════════════════════════
+       🩹 [إصلاح مقترح — نموذج غير منشور] **شفاء ذاتي من وصيّة الانقطاع.**
+       onDisconnect يكتب inactive عند أيّ انقطاعٍ عابر (تجميد الخلفية
+       على أجهزة هونر مثلاً) بينما قرار الكابتن الأخير المحفوظ
+       «متاح». فإذا وصلتنا inactive ونحن متاحون بذلك القرار — لا
+       ننطفئ فوراً: نعيد كتابة active بحقبة هذه اللحظة. نجحت الكتابة
+       بقينا متاحين والخادم موافق، وفشلت انطفأنا والمفتاح صادق —
+       لا خضرة كاذبة ولا استراحة كاذبة. وبحدّ ٣ محاولات في ٥ دقائق
+       حتى لا نحارب مُطفئاً حقيقياً إن وُجد.
+       ═══════════════════════════════════════════════════════════════ */
+    if(!on && isOnline && String(snap.val()||'')==='inactive'
+       && localStorage.getItem('was_online')==='true'){
+      const now=Date.now();
+      window._healLog=(window._healLog||[]).filter(t=>now-t<5*60*1000);
+      if(window._healLog.length<3){
+        window._healLog.push(now);
+        const ep=availEpoch;
+        const giveUp=()=>{ if(isOnline && availEpoch===ep){
+          paintToggle(false);
+          toast('ℹ️ حالتك عند الخادم: **في استراحة**','info');
+          track('mirror_off');
+        }};
+        fbStatus('active', ep).then(ok=>{
+          if(ok){ track('mirror_heal'); toast('ℹ️ انقطاع لحظي — أُعيد تثبيت توفّرك: **متاح للطلبات**','ok'); }
+          else giveUp();
+        }).catch(()=>giveUp());
+        return;
+      }
+    }
     paintToggle(on);
     /* أخبره حين يتغيّر بلا فعلٍ منه — فلا يُفاجَأ بطلب وهو يظنّ نفسه مستريحاً. */
     toast(on ? 'ℹ️ حالتك عند الخادم: **متاح للطلبات**'
