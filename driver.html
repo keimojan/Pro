@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.2-NativePulse";
+  const CURRENT_APP_VERSION = "16.3-PulseDiag";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -819,6 +819,7 @@ window.__SND={alert:"UklGRvaoAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YdKoAAA
       <div class="sg">
         <div class="sb"><div class="sb-v" id="siHrs">--</div><div class="sb-l">ساعات الشفت</div></div>
         <div class="sb"><div class="sb-v" id="siMode">--</div><div class="sb-l">وضع الدوام</div></div>
+        <div class="sb"><div class="sb-v" id="siPulse">--</div><div class="sb-l">النبضة الأصلية</div></div>
         <div class="sb"><div class="sb-v" id="siEnd">--</div><div class="sb-l">نهاية الشفت</div></div>
         <div class="sb"><div class="sb-v" id="siLeft">--</div><div class="sb-l">الوقت المتبقي</div></div>
         <div class="sb"><div class="sb-v" id="siLvl">--</div><div class="sb-l">مستواك</div></div>
@@ -1426,6 +1427,18 @@ function pushTokenToNative(tok){
     const cu=auth&&auth.currentUser;
     if(cu){ cu.getIdToken().then(idt=>{ try{ AndroidRadar.setAuthToken(String(idt)); }catch(e){} }).catch(()=>{ if(tok)AndroidRadar.setAuthToken(String(tok)); }); }
     else if(tok){ AndroidRadar.setAuthToken(String(tok)); }
+  }catch(e){}
+}
+
+/* [16.3] نشر الهوية للطبقة الأصلية من نقطة واحدة — تُستدعى من
+   startListeners (بوابة الدخول والاستعادة معاً) فلا تعتمد النبضة
+   على مواقع تسجيل الدخول وحدها. آمنة بلا جلسة: بلا مستخدم حالي
+   يُدفع الرقم فقط، والتوكن يتبع عند اكتمال المصادقة وإعادة النداء. */
+function publishIdentityToNative(){
+  try{
+    if(!drv||!drv.phone) return;
+    if(window.AndroidRadar&&typeof AndroidRadar.setDriverPhone==='function') AndroidRadar.setDriverPhone(String(drv.phone));
+    pushTokenToNative('');
   }catch(e){}
 }
 
@@ -2386,6 +2399,21 @@ window.openSettings=function(){
   document.getElementById('remTog').checked=(localStorage.getItem('suf_rem')!=='off');
   document.getElementById('siHrs').innerText=(drv?.shiftHours||'--')+' س';
   document.getElementById('siMode').innerText=(window._shiftsOff===true)?'دوام حر ♾️':'نظام شفتات';
+  /* [16.3] حالة النبضة الأصلية من الجسر — تُقرأ عند فتح الإعدادات */
+  try{
+    const pel=document.getElementById('siPulse');
+    if(pel&&window.AndroidRadar&&typeof AndroidRadar.getPresenceState==='function'){
+      const s=JSON.parse(AndroidRadar.getPresenceState());
+      pel.innerText =
+        !s.hasPhone ? 'لا رقم محفوظ' :
+        s.tokenAgeSec<0 ? 'لا توكن' :
+        s.tickAgeSec<0 ? 'الخدمة لم تبدأ' :
+        s.lastSkip ? ('تخطي: '+s.lastSkip) :
+        s.lastError ? ('خطأ: '+s.lastError) :
+        ('شغالة · نجاح '+s.beatsOk+' · كتابة '+s.httpStatus);
+      pel.title=JSON.stringify(s);
+    }
+  }catch(e){}
   const lv=level(lifetime);
   document.getElementById('siLvl').innerText=lv.t.split(' ')[1]||lv.t;
   document.getElementById('siTotal').innerText=lifetime;
@@ -2436,6 +2464,7 @@ function refreshDash(){
 /* ══════════════ المستمعات (كلها ذاتية الشفاء) ══════════════ */
 let _ready=false,_waiting=false;
 function startListeners(){
+  publishIdentityToNative(); /* [16.3] */
   if(_ready)return;
   if(!auth.currentUser){
     if(_waiting)return; _waiting=true;
