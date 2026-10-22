@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.3-PulseDiag";
+  const CURRENT_APP_VERSION = "16.4-PulseFull";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -2399,18 +2399,24 @@ window.openSettings=function(){
   document.getElementById('remTog').checked=(localStorage.getItem('suf_rem')!=='off');
   document.getElementById('siHrs').innerText=(drv?.shiftHours||'--')+' س';
   document.getElementById('siMode').innerText=(window._shiftsOff===true)?'دوام حر ♾️':'نظام شفتات';
-  /* [16.3] حالة النبضة الأصلية من الجسر — تُقرأ عند فتح الإعدادات */
+  /* [16.4] حالة النبضة الأصلية — القيم الحية كاملة من الجسر:
+     العلم الآن، عمر آخر دورة، آخر نبضة ناجحة، العدّادات، عمر التوكن،
+     وسبب التخطي/الخطأ الأخير. حتى لا يلتبس «العلم مطفي» بـ«آخر نبضة
+     كانت قبل التفعيل». */
   try{
     const pel=document.getElementById('siPulse');
     if(pel&&window.AndroidRadar&&typeof AndroidRadar.getPresenceState==='function'){
       const s=JSON.parse(AndroidRadar.getPresenceState());
+      const age=v=>(v==null||v<0)?'—':(v<60?(v+'ث'):(Math.round(v/60)+'د'));
       pel.innerText =
-        !s.hasPhone ? 'لا رقم محفوظ' :
-        s.tokenAgeSec<0 ? 'لا توكن' :
-        s.tickAgeSec<0 ? 'الخدمة لم تبدأ' :
-        s.lastSkip ? ('تخطي: '+s.lastSkip) :
-        s.lastError ? ('خطأ: '+s.lastError) :
-        ('شغالة · نجاح '+s.beatsOk+' · كتابة '+s.httpStatus);
+        (s.active?'العلم ✓':'العلم ✗')+
+        ' · دورة '+age(s.tickAgeSec)+
+        ' · نبضة '+age(s.beatAgeSec)+
+        ' · نجاح '+s.beatsOk+'/فشل '+s.beatsFail+
+        ' · توكن '+age(s.tokenAgeSec)+
+        (s.httpStatus?(' · أخير '+s.httpStatus):'')+
+        (s.lastSkip?(' · '+s.lastSkip):'')+
+        (s.lastError?(' · '+s.lastError):'');
       pel.title=JSON.stringify(s);
     }
   }catch(e){}
