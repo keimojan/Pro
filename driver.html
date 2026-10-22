@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.4-PulseFull";
+  const CURRENT_APP_VERSION = "16.5-IntentFlag";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -1439,6 +1439,17 @@ function publishIdentityToNative(){
     if(!drv||!drv.phone) return;
     if(window.AndroidRadar&&typeof AndroidRadar.setDriverPhone==='function') AndroidRadar.setDriverPhone(String(drv.phone));
     pushTokenToNative('');
+    pubAvail(); /* [16.5] إعادة تسليح علم النبضة من نيّة الكابتن المحفوظة */
+  }catch(e){}
+}
+
+/* [16.5] علم النبضة يتبع **نيّة الكابتن** (was_online — لا يكتبه إلا
+   toggleOnline بفعل الكابتن نفسه) ولا يتبع انعكاسات الخادم. */
+function pubAvail(){
+  try{
+    if(window.AndroidRadar&&typeof AndroidRadar.setPresenceActive==='function'){
+      AndroidRadar.setPresenceActive(localStorage.getItem('was_online')==='true');
+    }
   }catch(e){}
 }
 
@@ -2039,10 +2050,12 @@ function paintToggle(on){
      20 ث بلا طلب) وتُلغي القديم أولاً. ولا نُنشئ مؤقّتاً بيدنا. */
   if(on){ adjustHB(); awake(); }
   else  { if(hbTimer){ clearInterval(hbTimer); hbTimer=null; } unawake(); }
-  /* [16.2] النبضة الأصلية تتبع قرار الكابتن من هنا — نقطة الاختناق الوحيدة
-     لكل تغييرات التوفّر (مفتاح، مرآة، شفاء). النبضة تؤكد «متاح» فقط
-     ولا تكتب «استراحة» أبداً بنفسها. */
-  try{ if(window.AndroidRadar&&typeof AndroidRadar.setPresenceActive==='function') AndroidRadar.setPresenceActive(!!on); }catch(e){}
+  /* [16.5] أُزيل نشر علم النبضة من هنا **عمداً**: paintToggle تعكس
+     الحالة — ومنها ما يُرسم من الخادم (قراءة الإقلاع والمرآة) — فجعلُ
+     العلم تابعاً لها ربط النبضة بالإشارة المكسورة نفسها (الخادم يقول
+     inactive بعد كل انقطاع، فتُطفئ الصفحةُ العلمَ، فتسكت النبضة،
+     فيبقى الخادم inactive — قفل ذاتي). العلم صار يُنشر من مواضع
+     **قرار الكابتن** فقط: toggleOnline وpublishIdentityToNative. */
 }
 
 function listenMyStatus(){
@@ -2205,6 +2218,7 @@ window.toggleOnline=async function(){
     await awake();
     if(hbTimer)clearInterval(hbTimer); hbTimer=setInterval(heartbeat,active.length?10000:20000);
     localStorage.setItem('was_online','true');
+    pubAvail(); /* [16.5] */
     renderOrders();
   } else {
     lbl.className='tog-lbl'; lbl.innerText='في استراحة';
@@ -2236,6 +2250,7 @@ window.toggleOnline=async function(){
     })();
     if(hbTimer){clearInterval(hbTimer);hbTimer=null;}
     localStorage.setItem('was_online','false');
+    pubAvail(); /* [16.5] */
     renderOrders();
   }
 };
