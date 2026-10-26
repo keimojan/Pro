@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.6-Cap60";
+  const CURRENT_APP_VERSION = "16.7-SovCard";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -2745,7 +2745,7 @@ function listenOrders(){
         const fp=nP(f.driverPhone);
         const mine=(fp===myId)&&(f.status==='pending_driver'||f.status==='manual_pending');
         if(!mine)return;
-        if(active.find(o=>String(o.id)===String(f.id))){guaranteeAccept(f.id);stopAlarm();return;}
+        if(active.find(o=>String(o.id)===String(f.id))){if(!f.is_sovereign){guaranteeAccept(f.id);stopAlarm();return;}}
         if(curOrder&&String(curOrder.id)===String(f.id))return;
         curOrder={id:f.id,resName:f.restaurant,area:f.area||'غير محدد',price:f.price||0,details:f.details||'',
           photoUrl:f.photoUrl||'',resLat:f.resLat,resLng:f.resLng,resPhone:f.resPhone,resArea:f.resArea||null,
@@ -2775,14 +2775,14 @@ function countdown(){
     document.getElementById('tmrN').innerText=rem;
     const ts=Math.ceil(total/1000);
     if(ring)ring.style.strokeDashoffset=471-(rem*(471/Math.max(ts,1)));
-    if(rem<=0)declineOrder();
+    if(rem<=0){if(curOrder.is_sovereign)clearInterval(cdTimer);else declineOrder();}
   },1000);
 }
 /* 🔧[خ١٣] الرفض عبر البوابة السيرفرية: قواعد V2.1 تثبّت driverPhone على
    الكابتن (لا يستطيع إرجاعه لـ system_routing بنفسه)، والسيرفر يسجّل
    الرفض في daily_metrics دون أي خصم من daily_count. */
 window.declineOrder=function(){
-  if(curOrder?.is_sovereign)return alert('⚠️ تعيين إداري لا يمكن تجاهله.');
+  if(curOrder?.is_sovereign)return alert('⚠️ لا يمكنك الرفض — هذا تعيينٌ سيادي.');
   clearInterval(cdTimer); document.getElementById('alertOv').classList.add('dn'); stopAlarm();
   if(!curOrder)return;
   const id=curOrder.id;
