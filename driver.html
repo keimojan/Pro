@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.5-IntentFlag";
+  const CURRENT_APP_VERSION = "16.6-Cap60";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -2750,7 +2750,7 @@ function listenOrders(){
         curOrder={id:f.id,resName:f.restaurant,area:f.area||'غير محدد',price:f.price||0,details:f.details||'',
           photoUrl:f.photoUrl||'',resLat:f.resLat,resLng:f.resLng,resPhone:f.resPhone,resArea:f.resArea||null,
           comm:f.comm||0,payType:f.payType||'المطعم يدفع',is_sovereign:f.is_sovereign||false};
-        const age=f.last_update?(Date.now()-new Date(f.last_update).getTime()):0;
+        const age=f.last_update?Math.max(0,Date.now()-new Date(f.last_update).getTime()):0;
         curOrder.expire=Date.now()+Math.max(10000,60000-age);
         document.getElementById('alTitle').innerText=active.length?'طلب إضافي! 🔥':'طلب جديد!';
         document.getElementById('alSov').innerText=curOrder.is_sovereign?'⚠️ تعيين إداري مباشر — لا يمكن تجاهله':'';
