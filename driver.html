@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.7-SovCard";
+  const CURRENT_APP_VERSION = "16.8-CustMap";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -3014,6 +3014,7 @@ function renderOrders(){
     const rwa=rpn?('964'+rpn.substring(1)):null;
     const det=String(o.details||''); const cm=det.match(/(07[0-9]{8,9})/); const cp=cm?String(cm[0]):null;
     const mp=o.resLat?`https://www.google.com/maps/dir/?api=1&destination=${o.resLat},${o.resLng}`:'';
+    const cmp=(o.custLat&&o.custLng)?`https://www.google.com/maps/dir/?api=1&destination=${o.custLat},${o.custLng}`:'';
     const tags=dbl?`<span class="pill p-warn">🔥 مزدوج (${idx+1}/${active.length})</span>`:'';
     const ready=o.readyForPickup?`<div class="ready">${ICO.bell}<span class="ready-t">🍽️ الطلبية جاهزة — توجّه للاستلام!</span></div>`:'';
     const photo=(o.photoUrl&&String(o.photoUrl).startsWith('http'))?`<button class="act a-img" onclick="openReceipt('${o.photoUrl}')">${ICO.img} الوصل</button>`:'';
@@ -3046,6 +3047,7 @@ function renderOrders(){
             <div class="acts">
               ${cp?`<button class="act a-call" onclick="openLink('tel:${cp}')">${ICO.call} اتصال</button>`:''}
               ${cp?`<button class="act a-wa" onclick="smartWa('${jss(cp)}','${jss(o.resName)}','${jss(o.area)}','${sid(o.id)}','${num(o.price)}')">${ICO.wa} رسالة الزبون</button>`:''}
+              ${cmp?`<button class="act a-map" onclick="openLink('${cmp}')">${ICO.map} خريطة</button>`:''}
               ${photo}
             </div></div>
         </div>
