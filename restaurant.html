@@ -561,7 +561,19 @@
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
+    
+        /* ===== [STORE-TAB] تبويب منتجاتي — إضافات فقط ===== */
+        .prod-row { display:flex; align-items:center; gap:10px; background:#fff; border:1px solid rgba(0,0,0,0.05); border-radius:16px; padding:10px 12px; margin-bottom:10px; }
+        .prod-thumb { width:56px; height:56px; border-radius:12px; object-fit:cover; flex:none; background:rgba(15,23,42,0.05); }
+        .prod-thumb-empty { display:flex; align-items:center; justify-content:center; color:#94a3b8; }
+        .prod-info { flex:1; min-width:0; }
+        .prod-name { font-weight:800; font-size:0.92rem; color:var(--primary-blue-dark); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .prod-price { font-weight:800; font-size:0.85rem; color:#ea580c; margin-top:2px; }
+        .prod-act { border:none; border-radius:10px; padding:8px 10px; font-family:'Cairo'; font-weight:800; font-size:0.75rem; cursor:pointer; flex:none; }
+        .prod-act.edit { background:rgba(249,115,22,0.12); color:#c2410c; }
+        .prod-act.del { background:rgba(239,68,68,0.10); color:#b91c1c; }
+        .prod-photo-preview { width:72px; height:72px; border-radius:14px; object-fit:cover; border:1px solid rgba(0,0,0,0.06); }
+</style>
 </head>
 <body>
 
@@ -889,6 +901,9 @@
                         <div class="toggle-btn py-2" id="tabTodayArchive" onclick="switchListTab('archive')" style="background: transparent;">
                             مكتملة اليوم
                         </div>
+                        <div class="toggle-btn py-2" id="tabProducts" onclick="openProductsTab()" style="background: transparent;">
+                            منتجاتي
+                        </div>
                     </div>
 
                     <div id="activeOrdersList">
@@ -921,6 +936,40 @@
                             </div>
                         </div>
                     </div>
+                    <div id="productsPanel" class="hidden-section">
+                        <div style="background: rgba(255,255,255,0.55); border-radius: 20px; padding: 14px; margin-bottom: 12px;">
+                            <div class="fw-black mb-2" style="font-size: 0.95rem; color: var(--primary-blue-dark);">🏪 حالة <span id="shopStateName">المحل</span> وساعات العمل</div>
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="fw-bold" style="font-size: 0.85rem;">الحالة:</span>
+                                <button type="button" id="shopOpenBtn" class="prod-act edit" style="padding: 8px 18px; font-size: 0.82rem;" onclick="toggleShopOpen()">🟢 مفتوح</button>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="fw-bold" style="font-size: 0.8rem;">من الساعة</span>
+                                <input type="time" id="shopFrom" class="custom-input shadow-sm" style="flex: 1;">
+                                <span class="fw-bold" style="font-size: 0.8rem;">إلى</span>
+                                <input type="time" id="shopTo" class="custom-input shadow-sm" style="flex: 1;">
+                            </div>
+                            <button type="button" class="magical-submit-btn" style="padding: 10px;" onclick="saveShopHours()">حفظ ساعات العمل</button>
+                            <div class="text-muted fw-bold mt-2" style="font-size: 0.7rem;">عند إغلاق المحل أو خارج الساعات: الزبون يعرف أن المطعم مغلق ولا يُقبل أي طلب. ترك الساعات فارغة = بلا قيد زمني. الساعات بتوقيت <span id="shopTzArea">الحويجة</span>.</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.55); border-radius: 20px; padding: 14px; margin-bottom: 12px;">
+                            <div class="fw-black mb-2" id="prodFormTitle" style="font-size: 0.95rem; color: var(--primary-blue-dark);">إضافة منتج</div>
+                            <input type="text" id="prodName" class="custom-input w-100 mb-2 shadow-sm" placeholder="اسم المنتج">
+                            <input type="number" id="prodPrice" class="custom-input w-100 mb-2 shadow-sm" placeholder="سعر المنتج (د.ع)" min="0">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <button type="button" class="prod-act edit" style="padding: 10px 14px; font-size: 0.8rem;" onclick="document.getElementById('prodPhoto').click()">📷 صورة المنتج</button>
+                                <input type="file" id="prodPhoto" accept="image/*" style="display:none" onchange="processProductImage(this)">
+                                <img id="prodPhotoPreview" class="prod-photo-preview" style="display:none" alt="">
+                                <span id="prodPhotoName" class="text-muted fw-bold" style="font-size: 0.72rem;">لا توجد صورة بعد</span>
+                            </div>
+                            <button type="button" id="prodSaveBtn" class="magical-submit-btn" style="padding: 12px;" onclick="saveProduct()">حفظ المنتج</button>
+                            <button type="button" id="prodCancelEdit" class="prod-act del w-100 mt-2" style="display:none; padding: 10px;" onclick="resetProductForm()">إلغاء التعديل</button>
+                        </div>
+                        <div id="productsList">
+                            <div class="text-center text-muted fw-bold py-4 small" style="font-size: 0.8rem; background: rgba(255,255,255,0.4); border-radius: 20px;">لا توجد منتجات بعد — أضف أول منتج من النموذج فوق.</div>
+                        </div>
+                    </div>
+
                 </div>
 
             </div>
@@ -2494,7 +2543,7 @@
                     });
                 }
             } else {
-                newLiveOrders.push({ id: fbOrder.id, status: fbOrder.status, driverPhone: fbOrder.driverPhone || "system_routing", timestamp: fbOrder.timestamp, area: fbOrder.area, readyForPickup: fbOrder.ready_for_pickup || false, photoUrl: fbOrder.photoUrl });
+                newLiveOrders.push({ id: fbOrder.id, status: fbOrder.status, driverPhone: fbOrder.driverPhone || "system_routing", timestamp: fbOrder.timestamp, area: fbOrder.area, readyForPickup: fbOrder.ready_for_pickup || false, photoUrl: fbOrder.photoUrl, details: fbOrder.details || "", source: fbOrder.source || "", items: fbOrder.items || null, price: fbOrder.price || 0, deliveryFee: fbOrder.delivery_fee || 0 });
             }
         });
 
@@ -2647,6 +2696,7 @@
                     <div class="detail-item"><i data-lucide="map-pin" size="14" style="color: var(--accent);"></i> ${escapeHtml(orderArea || 'غير محددة')}</div>
                     <div class="detail-item"><i data-lucide="bike" size="14" style="color: var(--success);"></i> الكابتن: ${driverName}</div>
                 </div>
+                ${(o.source === 'store' && Array.isArray(o.items) && o.items.length) ? `<div class="archive-details-box w-100 text-start mt-2" dir="rtl"><div class="fw-bold text-dark mb-1"><i data-lucide="shopping-bag" size="12" style="color: var(--accent);"></i> أصناف الطلب:</div>${o.items.map(it => `<div class="d-flex justify-content-between fw-bold text-dark" style="font-size: 0.82rem;"><span>${escapeHtml(it.name || '')} ×${Number(it.qty) || 1}</span><span>${(Number(it.price || 0) * (Number(it.qty) || 1)).toLocaleString('ar-IQ')} د.ع</span></div>`).join('')}<div class="d-flex justify-content-between fw-bold text-dark mt-1 pt-1" style="border-top: 1px dashed rgba(15,23,42,0.12); font-size: 0.82rem;"><span>التوصيل: ${Number(o.deliveryFee || 0).toLocaleString('ar-IQ')} د.ع</span><span>الإجمالي: ${Number(o.price || 0).toLocaleString('ar-IQ')} د.ع</span></div></div>` : ''}
                 <div class="progress-tracker mt-3">
                     <div class="progress-line"></div>
                     <div class="progress-line-fill" style="width: ${fillWidth};"></div>
@@ -3413,6 +3463,252 @@
     // نربط الزر بعد تحميل الصفحة
     bindVoiceButton();
     setTimeout(() => { if (restoreActiveVoicePayload()) retryActiveVoiceOrder(); }, 4500);
+
+    /* ============================================================
+       [STORE-TAB] تبويب «منتجاتي» — كود مضاف فقط، لا يعدّل أي سلوك قائم.
+       المنتجات تُحفظ في stores/{رقم المنشأة}/products بالحقول: name, price, img
+       الصورة: تُضغط محلياً (canvas، حد 800px، JPEG) وتُحفظ كرابط بيانات داخل سجل المنتج.
+       ============================================================ */
+    let __prodListenerOn = false;
+    let __prodEditingId = null;
+    let __prodPhotoData = "";
+    let __prodCache = {};
+
+    function __prodPhone() {
+        try { return normalizeSystemPhone(window.__resPhone || ""); } catch (e) { return ""; }
+    }
+    function __prodEsc(s) {
+        return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+    function __prodIcons() { if (typeof lucide !== "undefined") lucide.createIcons(); }
+
+    window.openProductsTab = function() {
+        const tL = document.getElementById('tabLiveOrders');
+        const tA = document.getElementById('tabTodayArchive');
+        const tP = document.getElementById('tabProducts');
+        if (tL) { tL.style.background = 'transparent'; tL.style.border = '1px solid transparent'; tL.classList.remove('active'); }
+        if (tA) { tA.style.background = 'transparent'; tA.style.border = '1px solid transparent'; }
+        if (tP) { tP.style.background = 'rgba(255,255,255,0.8)'; tP.style.border = '1px solid rgba(0,0,0,0.05)'; }
+        document.getElementById('activeOrdersList').classList.add('hidden-section');
+        document.getElementById('todayArchiveList').classList.add('hidden-section');
+        document.getElementById('productsPanel').classList.remove('hidden-section');
+        __startProductsListener();
+        __startShopListener();
+    };
+
+    // عند الرجوع لأي تبويب طلبات: أخفِ لوحة المنتجات وأعد ضبط تبويبها (مستمعات مضافة فقط)
+    ['tabLiveOrders', 'tabTodayArchive'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', () => {
+            const p = document.getElementById('productsPanel');
+            const tP = document.getElementById('tabProducts');
+            if (p) p.classList.add('hidden-section');
+            if (tP) { tP.style.background = 'transparent'; tP.style.border = '1px solid transparent'; }
+        });
+    });
+
+    function __startProductsListener() {
+        if (__prodListenerOn) return;
+        const phone = __prodPhone();
+        const list = document.getElementById('productsList');
+        if (!phone) {
+            if (list) list.innerHTML = '<div class="text-center text-muted fw-bold py-4 small" style="font-size: 0.8rem; background: rgba(255,255,255,0.4); border-radius: 20px;">سجّل الدخول أولاً لعرض منتجاتك.</div>';
+            return;
+        }
+        __prodListenerOn = true;
+        onValue(ref(db, 'stores/' + phone + '/products'), (snap) => {
+            __prodCache = snap.val() || {};
+            __renderProducts();
+        }, () => {
+            const l = document.getElementById('productsList');
+            if (l) l.innerHTML = '<div class="text-center text-muted fw-bold py-4 small" style="font-size: 0.8rem; background: rgba(255,255,255,0.4); border-radius: 20px;">تعذّر تحميل المنتجات حالياً.</div>';
+        });
+    }
+
+    function __renderProducts() {
+        const list = document.getElementById('productsList');
+        if (!list) return;
+        const ids = Object.keys(__prodCache).sort((a, b) => (__prodCache[a].ts || 0) - (__prodCache[b].ts || 0));
+        if (!ids.length) {
+            list.innerHTML = '<div class="text-center text-muted fw-bold py-4 small" style="font-size: 0.8rem; background: rgba(255,255,255,0.4); border-radius: 20px;">لا توجد منتجات بعد — أضف أول منتج من النموذج فوق.</div>';
+            return;
+        }
+        list.innerHTML = ids.map(id => {
+            const p = __prodCache[id] || {};
+            const thumb = p.img
+                ? '<img class="prod-thumb" src="' + p.img + '" alt="">'
+                : '<div class="prod-thumb prod-thumb-empty"><i data-lucide="image" size="22"></i></div>';
+            const avOff = p.available === false;
+            return '<div class="prod-row">' + thumb +
+                '<div class="prod-info"' + (avOff ? ' style="opacity: 0.5;"' : '') + '><div class="prod-name">' + __prodEsc(p.name || "") + (avOff ? ' <span style="color: #dc2626; font-size: 0.7rem;">(مغلق)</span>' : '') + '</div>' +
+                '<div class="prod-price">' + Number(p.price || 0).toLocaleString('ar-IQ') + ' د.ع</div></div>' +
+                '<button type="button" class="prod-act" style="' + (avOff ? 'background: #fee2e2; color: #b91c1c;' : 'background: #dcfce7; color: #15803d;') + '" onclick="toggleProductAvail(\'' + id + '\')">' + (avOff ? '🔴 مغلق' : '🟢 متاح') + '</button>' +
+                '<button type="button" class="prod-act edit" onclick="editProduct(\'' + id + '\')">تعديل</button>' +
+                '<button type="button" class="prod-act del" onclick="deleteProduct(\'' + id + '\')">حذف</button>' +
+                '</div>';
+        }).join("");
+        __prodIcons();
+    }
+
+    window.processProductImage = async function(input) {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const nameEl = document.getElementById('prodPhotoName');
+        try {
+            nameEl.textContent = 'جارٍ ضغط الصورة…';
+            let bmp = null;
+            if (window.createImageBitmap) { try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = null; } }
+            let w, h, draw;
+            if (bmp) { w = bmp.width; h = bmp.height; draw = bmp; }
+            else {
+                const url = URL.createObjectURL(file);
+                draw = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+                w = draw.naturalWidth; h = draw.naturalHeight;
+            }
+            if (!w || !h) throw new Error('bad image');
+            let scale = Math.min(1, 700 / Math.max(w, h));
+            let dataUrl = '';
+            for (let attempt = 0; attempt < 4; attempt++) {
+                const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = cw; canvas.height = ch;
+                canvas.getContext('2d').drawImage(draw, 0, 0, cw, ch);
+                let q = 0.82;
+                dataUrl = canvas.toDataURL('image/jpeg', q);
+                while (dataUrl.length > 380000 && q > 0.45) { q -= 0.12; dataUrl = canvas.toDataURL('image/jpeg', q); }
+                if (dataUrl.length <= 380000) break;
+                scale *= 0.75;
+            }
+            if (bmp && bmp.close) bmp.close();
+            __prodPhotoData = dataUrl;
+            const prev = document.getElementById('prodPhotoPreview');
+            prev.src = dataUrl; prev.style.display = '';
+            nameEl.textContent = file.name + ' — بعد الضغط ~' + Math.round(dataUrl.length * 0.75 / 1024) + 'KB';
+        } catch (e) {
+            nameEl.textContent = 'تعذّرت قراءة هذه الصورة — جرّب صورة أخرى';
+        }
+    };
+
+    window.resetProductForm = function() {
+        __prodEditingId = null;
+        __prodPhotoData = "";
+        document.getElementById('prodName').value = "";
+        document.getElementById('prodPrice').value = "";
+        document.getElementById('prodPhoto').value = "";
+        document.getElementById('prodPhotoPreview').style.display = 'none';
+        document.getElementById('prodPhotoName').textContent = 'لا توجد صورة بعد';
+        document.getElementById('prodFormTitle').textContent = 'إضافة منتج';
+        document.getElementById('prodSaveBtn').textContent = 'حفظ المنتج';
+        document.getElementById('prodCancelEdit').style.display = 'none';
+    };
+
+    window.editProduct = function(id) {
+        const p = __prodCache[id];
+        if (!p) return;
+        __prodEditingId = id;
+        __prodPhotoData = p.img || "";
+        document.getElementById('prodName').value = p.name || "";
+        document.getElementById('prodPrice').value = p.price ?? "";
+        const prev = document.getElementById('prodPhotoPreview');
+        if (p.img) { prev.src = p.img; prev.style.display = ''; document.getElementById('prodPhotoName').textContent = 'الصورة الحالية'; }
+        else { prev.style.display = 'none'; document.getElementById('prodPhotoName').textContent = 'لا توجد صورة بعد'; }
+        document.getElementById('prodFormTitle').textContent = 'تعديل منتج';
+        document.getElementById('prodSaveBtn').textContent = 'حفظ التعديل';
+        document.getElementById('prodCancelEdit').style.display = '';
+        document.getElementById('prodName').focus();
+    };
+
+    window.saveProduct = async function() {
+        const phone = __prodPhone();
+        if (!phone) return alert("سجّل الدخول أولاً.");
+        const name = document.getElementById('prodName').value.trim();
+        const price = Number(document.getElementById('prodPrice').value);
+        if (!name) return alert("اكتب اسم المنتج.");
+        if (!price || price <= 0) return alert("اكتب سعراً صحيحاً للمنتج.");
+        const id = __prodEditingId || ('p' + Date.now().toString(36) + Math.floor(Math.random() * 999));
+        const rec = { name, price, img: __prodPhotoData || "", ts: Date.now() };
+        try {
+            window.showLoading(true);
+            await set(ref(db, 'stores/' + phone + '/products/' + id), rec);
+            window.showLoading(false);
+            window.resetProductForm();
+            alert("تم حفظ المنتج ✅");
+        } catch (e) {
+            window.showLoading(false);
+            alert("تعذّر حفظ المنتج — حاول مجدداً.");
+        }
+    };
+
+    /* ── [STORE-TAB] حالة المحل وساعات العمل + إتاحة المنتجات ── */
+    let __shopProfile = {};
+    let __shopReg = { name: '', area: '' };
+    let __shopListenerOn = false;
+    function __shopFem(n) { return /(مرطبات|مشويات|حلويات|مأكولات)/.test(n) || /ة$/.test(String(n).trim()) || /ات$/.test(String(n).trim()); }
+    function __renderShopState() {
+        const name = __shopReg.name || __shopProfile.name || 'المحل';
+        const open = __shopProfile.open !== false;
+        const fem = __shopFem(name);
+        const title = document.getElementById('shopStateName');
+        if (title) title.textContent = name;
+        const btn = document.getElementById('shopOpenBtn');
+        if (btn) btn.textContent = (open ? '🟢 ' : '🔴 ') + name + ' ' + (fem ? (open ? 'مفتوحة' : 'مغلقة') : (open ? 'مفتوح' : 'مغلق'));
+        const tz = document.getElementById('shopTzArea');
+        if (tz) tz.textContent = __shopReg.area || 'الحويجة';
+    }
+    function __startShopListener() {
+        if (__shopListenerOn) return;
+        const phone = __prodPhone();
+        if (!phone) return;
+        __shopListenerOn = true;
+        get(ref(db, 'restaurants/' + phone)).then(snap => {
+            const rp = snap.val() || {};
+            __shopReg = { name: String(rp.name || ''), area: String(rp.area || rp.city || '') };
+            __renderShopState();
+        }).catch(() => {});
+        onValue(ref(db, 'stores/' + phone + '/profile'), (snap) => {
+            __shopProfile = snap.val() || {};
+            __renderShopState();
+            const f = document.getElementById('shopFrom'), u = document.getElementById('shopTo');
+            if (f && document.activeElement !== f) f.value = __shopProfile.from || '';
+            if (u && document.activeElement !== u) u.value = __shopProfile.to || '';
+        });
+    }
+    window.toggleShopOpen = async function() {
+        const phone = __prodPhone();
+        if (!phone) return alert('سجّل الدخول أولاً.');
+        try { await update(ref(db, 'stores/' + phone + '/profile'), { open: !(__shopProfile.open === false) ? false : true }); }
+        catch (e) { alert('تعذّر تغيير حالة المحل.'); }
+    };
+    window.saveShopHours = async function() {
+        const phone = __prodPhone();
+        if (!phone) return alert('سجّل الدخول أولاً.');
+        const f = document.getElementById('shopFrom').value, u = document.getElementById('shopTo').value;
+        if ((f && !u) || (!f && u)) return alert('حدّد الساعتين معاً (من وإلى) أو اتركهما فارغتين.');
+        try {
+            await update(ref(db, 'stores/' + phone + '/profile'), { from: f || '', to: u || '' });
+            alert('تم حفظ ساعات العمل ✅');
+        } catch (e) { alert('تعذّر حفظ الساعات.'); }
+    };
+    window.toggleProductAvail = async function(id) {
+        const phone = __prodPhone();
+        if (!phone) return;
+        const cur = (__prodCache[id] || {}).available === false;
+        try { await set(ref(db, 'stores/' + phone + '/products/' + id + '/available'), cur ? true : false); }
+        catch (e) { alert('تعذّر تغيير إتاحة المنتج.'); }
+    };
+
+    window.deleteProduct = async function(id) {
+        const phone = __prodPhone();
+        if (!phone) return;
+        const p = __prodCache[id] || {};
+        if (!confirm("حذف المنتج «" + (p.name || "") + "»؟")) return;
+        try {
+            await set(ref(db, 'stores/' + phone + '/products/' + id), null);
+            if (__prodEditingId === id) window.resetProductForm();
+        } catch (e) {
+            alert("تعذّر حذف المنتج — حاول مجدداً.");
+        }
+    };
 </script>
 <script>
 if ("serviceWorker" in navigator) {
