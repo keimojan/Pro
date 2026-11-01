@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.8-CustMap";
+  const CURRENT_APP_VERSION = "16.9-Phrases";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -2667,7 +2667,14 @@ function listenOrders(){
       }
       const st=String(f.status||'').toLowerCase();
       const DONE=['completed','مكتمل','settled','delivered','done','تم التسليم','تم','deleted'];
-      if(DONE.includes(st)||DONE.includes(f.status)){rm.push({id:mo.id,m:'تم إنهاء الطلب.'});continue;}
+      if(DONE.includes(st)||DONE.includes(f.status)){
+        let endMsg;
+        if(st==='deleted'||st==='cancelled'||st==='canceled'){
+          endMsg = f.completed_at ? 'تم تسليم الطلب بنجاح.'
+            : (String(f.cancelled_by||'')==='restaurant' ? 'تم الغاء الطلب من المطعم.' : 'تم الغاء الطلب من الإدارة.');
+        } else endMsg = 'تم تسليم الطلب بنجاح.';
+        rm.push({id:mo.id,m:endMsg});continue;
+      }
       const fp=nP(f.driverPhone);
       if(fp&&fp!==myId&&f.status!=='pending_driver'&&f.status!=='manual_pending')rm.push({id:mo.id,m:'سُحب الطلب لكابتن آخر.'});
     }
@@ -2713,7 +2720,7 @@ function listenOrders(){
         active.push({id:oid,resName:f.restaurant||'',resArea:f.resArea||null,
           details:String(f.details||''),price:parseFloat(f.price)||0,area:f.area||'غير محدد',
           state:st2,photoUrl:f.photoUrl||'',resPhone:f.resPhone||'غير متوفر',
-          resLat:f.resLat,resLng:f.resLng,comm:f.comm||0,payType:f.payType||'المطعم يدفع',
+          resLat:f.resLat,resLng:f.resLng,custLat:f.custLat||null,custLng:f.custLng||null,comm:f.comm||0,payType:f.payType||'المطعم يدفع',
           acceptedTime:srvMs,
           pickupTime: st2==='picked_up' ? Math.min(srvMs, Date.now()-MIN_PICKUP_SECS*1000) : null,
           is_sovereign:f.is_sovereign||false,readyForPickup:f.ready_for_pickup===true});
@@ -2748,7 +2755,7 @@ function listenOrders(){
         if(active.find(o=>String(o.id)===String(f.id))){if(!f.is_sovereign){guaranteeAccept(f.id);stopAlarm();return;}}
         if(curOrder&&String(curOrder.id)===String(f.id))return;
         curOrder={id:f.id,resName:f.restaurant,area:f.area||'غير محدد',price:f.price||0,details:f.details||'',
-          photoUrl:f.photoUrl||'',resLat:f.resLat,resLng:f.resLng,resPhone:f.resPhone,resArea:f.resArea||null,
+          photoUrl:f.photoUrl||'',resLat:f.resLat,resLng:f.resLng,custLat:f.custLat||null,custLng:f.custLng||null,resPhone:f.resPhone,resArea:f.resArea||null,
           comm:f.comm||0,payType:f.payType||'المطعم يدفع',is_sovereign:f.is_sovereign||false};
         const age=f.last_update?Math.max(0,Date.now()-new Date(f.last_update).getTime()):0;
         curOrder.expire=Date.now()+Math.max(10000,60000-age);
