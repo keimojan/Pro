@@ -105,7 +105,7 @@
   .step.on .sl, .step.done .sl{ color:var(--ink); }
   .drv{ background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; border-radius:12px; padding:9px 12px; font-weight:800; font-size:.85rem; margin-top:10px; display:none; }
   .empty{ text-align:center; color:var(--mut); font-weight:700; padding:34px 10px; font-size:.9rem; line-height:1.9; }
-  #toast{ position:fixed; bottom:100px; inset-inline:0; margin:0 auto; width:max-content; max-width:88vw; background:var(--ink); color:#fff; font-weight:800; font-size:.85rem; border-radius:999px; padding:11px 18px; z-index:60; display:none; box-shadow:0 8px 24px rgba(0,0,0,.3); text-align:center; }
+  #toast{ position:fixed; bottom:108px; inset-inline:0; margin:0 auto; width:max-content; max-width:88vw; background:var(--ink); color:#fff; font-weight:800; font-size:.85rem; border-radius:999px; padding:11px 18px; z-index:60; display:none; box-shadow:0 8px 24px rgba(0,0,0,.3); text-align:center; }
 </style>
 
 <style>
@@ -167,7 +167,7 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 .addots i.on{ width:18px; background:#f97316; }
 #searchRow{ background:#292524; border:1px solid #3a332c; margin:12px 0 2px; }
 #searchRow input{ color:#f5f0ea; } #searchRow input::placeholder{ color:#8f8a84; }
-#bnav{ position:fixed; bottom:12px; inset-inline:12px; max-width:532px; margin:0 auto; background:#211d1a; border:1px solid #3a332c; border-radius:24px; box-shadow:0 16px 34px rgba(28,25,23,.35); display:flex; align-items:center; z-index:45; padding:6px 8px; }
+#bnav{ position:fixed; bottom:0; inset-inline:0; background:#211d1a; border-top:1px solid #3a332c; border-radius:22px 22px 0 0; box-shadow:0 -10px 28px rgba(0,0,0,.4); display:flex; align-items:center; z-index:45; padding:6px 8px calc(8px + env(safe-area-inset-bottom)); }
 #bnav button{ flex:1; background:none; border:none; font-family:inherit; font-weight:700; font-size:.68rem; color:#a8a29e; padding:7px 0 5px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
 #bnav button svg{ width:23px; height:23px; }
 #bnav button.on{ color:#fb923c; font-weight:800; }
@@ -176,9 +176,12 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 #bnav .fab svg{ width:25px; height:25px; }
 #bnav .fab .bdg{ position:absolute; top:-3px; inset-inline-end:-3px; background:#dc2626; color:#fff; font-size:.62rem; font-weight:800; min-width:19px; height:19px; border-radius:99px; display:none; align-items:center; justify-content:center; padding:0 5px; }
 #fablab{ font-size:.6rem; font-weight:800; color:#fb923c; margin-top:3px; }
-#cartBar{ bottom:96px; background:linear-gradient(135deg,#f97316,#ea580c); }
-.stamp{ position:absolute; top:12px; inset-inline-end:12px; z-index:3; width:64px; height:64px; border-radius:50%; border:2.5px solid #fbbf24; color:#fbbf24; background:rgba(20,16,12,.55); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:.8rem; transform:rotate(-12deg); box-shadow:0 0 0 4px rgba(251,191,36,.16), inset 0 0 0 2.5px rgba(251,191,36,.35); text-shadow:0 1px 4px rgba(0,0,0,.45); }
-.shoptile .stamp{ width:52px; height:52px; font-size:.68rem; top:8px; inset-inline-end:8px; }
+#cartBar{ bottom:100px; background:linear-gradient(135deg,#f97316,#ea580c); }
+.stamp{ position:absolute; top:12px; inset-inline-end:0; z-index:3; display:inline-flex; align-items:center; gap:5px; background:linear-gradient(120deg,#fbbf24 0%,#f97316 48%,#ea580c 100%); color:#fff; font-size:.74rem; font-weight:900; padding:6px 12px; border-start-start-radius:9px; border-end-start-radius:9px; box-shadow:0 8px 18px rgba(234,88,12,.42); text-shadow:0 1px 2px rgba(0,0,0,.18); }
+.stamp svg{ width:14px; height:14px; flex:0 0 auto; filter:drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
+.stamp::after{ content:''; position:absolute; bottom:-6px; inset-inline-end:0; border-top:6px solid #9a3412; border-inline-start:7px solid transparent; }
+.shoptile .stamp{ top:9px; font-size:.64rem; padding:5px 9px; }
+.shoptile .stamp svg{ width:12px; height:12px; }
 .shopgrid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .shoptile{ position:relative; background:#211d1a; border:1px solid var(--line); border-radius:18px; overflow:hidden; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.3); }
 .shoptile img{ width:100%; aspect-ratio:1.2; object-fit:cover; display:block; }
@@ -466,9 +469,10 @@ function renderShops() {
       const covKey2 = String(s.name || '').trim();
       const cov2 = esc(s.cover || (SHOP_COVERS[covKey2] ? U(SHOP_COVERS[covKey2]) : shopImg(s)));
       const chip = !s.hasProducts ? '<span class="stchip none">لا منتجات بعد</span>' : closed ? '<span class="stchip closed">مغلق حالياً</span>' : '';
+      const prmT = s.promo ? '<span class="stchip prm" style="top:' + (chip ? '38px' : '8px') + '">🎁 ' + esc(promoLabel(s.promo)) + '</span>' : '';
       const meta = (s.__d != null ? s.__d.toFixed(1) + ' كم · ' : '') + (s.hasProducts ? (s.productsCount + ' منتج') : 'لا منتجات بعد');
-      const stamp2 = (window.__featPhone && s.phone === window.__featPhone) ? '<span class="stamp">متميّز</span>' : '';
-      return '<div class="shoptile' + ((!s.hasProducts || closed) ? ' dim' : '') + '" data-phone="' + esc(s.phone) + '"><img src="' + cov2 + '" alt="" loading="lazy">' + chip + stamp2 + '<div class="tn">' + esc(s.name || 'مطعم') + '</div><div class="tm">' + esc(meta) + '</div></div>';
+      const stamp2 = (window.__featPhone && s.phone === window.__featPhone) ? '<span class="stamp"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7.2 7.8 10 12 4.6 16.2 10 21 7.2 19.4 16H4.6L3 7.2ZM4.8 17.8h14.4V20H4.8v-2.2Z"/></svg>متميّز</span>' : '';
+      return '<div class="shoptile' + ((!s.hasProducts || closed) ? ' dim' : '') + '" data-phone="' + esc(s.phone) + '"><img src="' + cov2 + '" alt="" loading="lazy">' + chip + prmT + stamp2 + '<div class="tn">' + esc(s.name || 'مطعم') + '</div><div class="tm">' + esc(meta) + '</div></div>';
     }).join('') + '</div>';
     el.querySelectorAll('.shoptile img').forEach(im => im.addEventListener('error', () => { if (!im.dataset.fb) { im.dataset.fb = '1'; im.src = U('photo-1517248135467-4c7edcad34c4'); } }));
     el.querySelectorAll('.shoptile').forEach(c => c.addEventListener('click', () => {
@@ -485,7 +489,7 @@ function renderShops() {
     const prm = s.promo ? '<span class="stchip prm">🎁 ' + esc(promoLabel(s.promo)) + '</span>' : '';
     const covKey = String(s.name || '').trim();
     const cov = '<img src="' + esc(s.cover || (SHOP_COVERS[covKey] ? U(SHOP_COVERS[covKey]) : shopImg(s))) + '" alt="" loading="lazy">';
-    const stamp = (window.__featPhone && s.phone === window.__featPhone) ? '<span class="stamp">متميّز</span>' : '';
+    const stamp = (window.__featPhone && s.phone === window.__featPhone) ? '<span class="stamp"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7.2 7.8 10 12 4.6 16.2 10 21 7.2 19.4 16H4.6L3 7.2ZM4.8 17.8h14.4V20H4.8v-2.2Z"/></svg>متميّز</span>' : '';
     const info = !s.hasProducts ? '<span>لم يضف منتجاته بعد</span>' + ((s.__d != null) ? '<span>📍 <b>' + s.__d.toFixed(1) + ' كم</b></span>' : '') + '<span>' + esc(s.__cat) + '</span>'
       : '<span>🛵 <b>' + fmt(mf) + '</b> توصيل من</span>' + ((s.__d != null) ? '<span>📍 <b>' + s.__d.toFixed(1) + ' كم</b></span>' : '') +
         '<span>' + esc(s.__cat) + ' · ' + s.productsCount + ' منتج</span>' +
