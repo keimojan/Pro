@@ -573,7 +573,7 @@ $('#submitBtn').addEventListener('click', async () => {
 });
 
 /* ── التتبع: ٣ خطوات + اسم الكابتن ── */
-const STEP_TXT = ['تم تأكيد طلبك', 'طلبك مع الكابتن في الطريق إليك', 'تم التوصيل'];
+const STEP_TXT = ['تم تأكيد طلبك', 'طلبك مع الكابتن في الطريق إليك', 'تم تسليم الطلب'];
 let trackState = {};   // id -> {step, status, driverName}
 function renderTrack() {
   const z = $('#trackZone');
@@ -584,7 +584,7 @@ function renderTrack() {
     '<b>' + esc(o.shopName) + '</b><span style="color:var(--mut);font-size:.72rem;font-weight:700">طلب ' + esc(String(o.id).slice(-6)) + '</span></div>';
   if (st.step === 0) {
     const cmsg = st.cancelSource === 'restaurant' ? 'تم إلغاء الطلب من المطعم'
-               : st.cancelSource === 'admin' ? 'تم إلغاء الطلب من الإدارة' : 'أُلغي هذا الطلب';
+               : st.cancelSource === 'withdrawn' ? 'تم سحب الطلب' : 'أُلغي الطلب';
     inner += '<div style="margin-top:10px;font-weight:800;color:var(--bad)">' + cmsg + '</div>' +
       '<button class="btn btn-ghost" id="trkDismiss" type="button" style="margin-top:10px">إغلاق</button>';
   } else {
