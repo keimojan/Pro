@@ -182,6 +182,17 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 .stamp::after{ content:''; position:absolute; bottom:-6px; inset-inline-end:0; border-top:6px solid #9a3412; border-inline-start:7px solid transparent; }
 .shoptile .stamp{ top:9px; font-size:.64rem; padding:5px 9px; }
 .shoptile .stamp svg{ width:12px; height:12px; }
+.skl{ position:relative; overflow:hidden; background:#262019; border-radius:14px; }
+.skl::after{ content:''; position:absolute; inset:0; background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.07) 50%,transparent 70%); transform:translateX(-100%); animation:sklmove 1.25s infinite; }
+@keyframes sklmove{ to{ transform:translateX(100%); } }
+.sk-wrap{ display:flex; flex-direction:column; gap:14px; }
+.sk-card{ border:1px solid var(--line); border-radius:20px; padding-bottom:12px; background:#1d1916; }
+.sk-img{ height:150px; border-radius:20px 20px 0 0; }
+.sk-line{ height:12px; margin:12px 14px 0; }
+.sk-line.short{ width:45%; }
+.sk-cats{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.sk-cat{ aspect-ratio:.92; }
+.sk-prod{ height:158px; }
 .shopgrid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .shoptile{ position:relative; background:#211d1a; border:1px solid var(--line); border-radius:18px; overflow:hidden; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.3); }
 .shoptile img{ width:100%; aspect-ratio:1.2; object-fit:cover; display:block; }
@@ -215,9 +226,9 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
       <div class="t" id="locTxt">المطاعم مرتّبة: ذات المنتجات أولاً</div>
       <button class="btn btn-ghost" id="locBtn" type="button">حدّد موقعي للأقرب</button>
     </div>
-    <div class="catchips" id="catChips"></div>
+    <div class="catchips" id="catChips"><div class="sk-cats"><div class="skl sk-cat"></div><div class="skl sk-cat"></div><div class="skl sk-cat"></div><div class="skl sk-cat"></div></div></div>
     <div class="sec-title">كل المطاعم والمحلات</div>
-    <div id="shopsList"><div class="empty">جارٍ تحميل المطاعم…</div></div>
+    <div id="shopsList"><div class="sk-wrap"><div class="sk-card"><div class="skl sk-img"></div><div class="skl sk-line"></div><div class="skl sk-line short"></div></div><div class="sk-card"><div class="skl sk-img"></div><div class="skl sk-line"></div><div class="skl sk-line short"></div></div></div></div>
   </section>
 
   <!-- صفحة مطعم -->
@@ -534,7 +545,7 @@ async function openShop(s) {
   $('#shopsView').style.display = 'none'; $('#shopView').style.display = '';
   $('#shopTitle').textContent = s.name;
   renderClosedBanner(); renderCartBar();
-  $('#prodGrid').innerHTML = '<div class="empty" style="grid-column:1/-1">جارٍ تحميل المنتجات…</div>';
+  $('#prodGrid').innerHTML = '<div class="skl sk-prod"></div><div class="skl sk-prod"></div><div class="skl sk-prod"></div><div class="skl sk-prod"></div>';
   try { const r = await fetch(RTDB_URL + '/stores/' + s.phone + '/products.json'); curProducts = (await r.json()) || {}; }
   catch (e) { curProducts = {}; }
   renderProducts();
