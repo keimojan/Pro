@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.9-Phrases";
+  const CURRENT_APP_VERSION = "16.10-CustPin";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -2858,7 +2858,7 @@ function finalizeAccept(){
   document.getElementById('alertOv').classList.add('dn');
   const o={id:curOrder.id,resName:curOrder.resName,resArea:curOrder.resArea||null,details:String(curOrder.details),
     price:parseFloat(curOrder.price)||0,area:curOrder.area,state:'heading',photoUrl:curOrder.photoUrl,
-    resPhone:curOrder.resPhone,resLat:curOrder.resLat,resLng:curOrder.resLng,
+    resPhone:curOrder.resPhone,resLat:curOrder.resLat,resLng:curOrder.resLng,custLat:curOrder.custLat||null,custLng:curOrder.custLng||null,
     comm:curOrder.comm||0,payType:curOrder.payType||'المطعم يدفع',
     acceptedTime:Date.now(),is_sovereign:curOrder.is_sovereign||false,readyForPickup:false};
   active.push(o); localStorage.setItem('suf_orders',JSON.stringify(active));
