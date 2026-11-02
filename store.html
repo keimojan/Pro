@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>سوق PRO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
@@ -49,7 +49,7 @@
   .inforow{ display:flex; gap:12px; flex-wrap:wrap; margin-top:6px; font-size:.72rem; color:var(--mut); font-weight:700; }
   .inforow b{ color:#44403c; }
   .searchbar{ display:flex; align-items:center; gap:8px; background:#fff; border:1.5px solid var(--line); border-radius:13px; padding:4px 12px; margin-bottom:12px; }
-  .searchbar input{ flex:1; border:none; outline:none; font-family:inherit; font-size:.88rem; font-weight:700; padding:8px 0; background:transparent; color:var(--ink); }
+  .searchbar input{ flex:1; border:none; outline:none; font-family:inherit; font-size:16px; font-weight:700; padding:8px 0; background:transparent; color:var(--ink); }
   #bnav{ position:fixed; bottom:0; inset-inline:0; background:#fff; border-top:1px solid var(--line); display:flex; z-index:45; padding:6px 4px calc(6px + env(safe-area-inset-bottom)); }
   #bnav button{ flex:1; background:none; border:none; border-top:3px solid transparent; font-family:inherit; font-weight:800; font-size:.72rem; color:#a8a29e; padding:7px 0 3px; cursor:pointer; }
   #bnav button.on{ color:var(--or); border-top-color:var(--or); }
@@ -171,6 +171,8 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 #searchRow input{ color:#f5f0ea; } #searchRow input::placeholder{ color:#8f8a84; }
 #shopSearchRow{ background:#292524; border:1px solid #3a332c; margin:10px 0 12px; }
 #shopSearchRow input{ color:#f5f0ea; } #shopSearchRow input::placeholder{ color:#8f8a84; }
+/* تثبيت الشاشة (طلب علي): لا سحب-للتحديث ولا ارتداد عند الحواف */
+html, body{ overscroll-behavior:none; }
 #bnav{ position:fixed; bottom:0; inset-inline:0; background:#211d1a; border-top:1px solid #3a332c; border-radius:22px 22px 0 0; box-shadow:0 -10px 28px rgba(0,0,0,.4); display:flex; align-items:center; z-index:45; padding:6px 8px calc(8px + env(safe-area-inset-bottom)); }
 #bnav button{ flex:1; background:none; border:none; font-family:inherit; font-weight:700; font-size:.68rem; color:#a8a29e; padding:7px 0 5px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
 #bnav button svg{ width:23px; height:23px; }
