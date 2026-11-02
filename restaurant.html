@@ -951,6 +951,15 @@
                             </div>
                             <button type="button" class="magical-submit-btn" style="padding: 10px;" onclick="saveShopHours()">حفظ ساعات العمل</button>
                             <div class="text-muted fw-bold mt-2" style="font-size: 0.7rem;">عند إغلاق المحل أو خارج الساعات: الزبون يعرف أن المطعم مغلق ولا يُقبل أي طلب. ترك الساعات فارغة = بلا قيد زمني. الساعات بتوقيت <span id="shopTzArea">الحويجة</span>.</div>
+                            <hr style="border-color: rgba(0,0,0,0.08); margin: 12px 0;">
+                            <div class="fw-black mb-2" style="font-size: 0.95rem; color: var(--primary-blue-dark);">🖼️ صورة غلاف المحل</div>
+                            <img id="coverPreview" style="display:none; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:14px; border:1px solid rgba(0,0,0,0.06); margin-bottom:8px;" alt="">
+                            <div id="coverEmpty" class="text-muted fw-bold mb-2" style="font-size: 0.75rem; background: rgba(15,23,42,0.04); border-radius: 12px; padding: 14px; text-align: center;">لا توجد صورة غلاف بعد — تظهر للزبون حالياً صورة أول منتج</div>
+                            <div class="d-flex align-items-center gap-2">
+                                <label class="prod-act edit" style="padding: 10px 14px; font-size: 0.8rem; position: relative; overflow: hidden; cursor: pointer; display: inline-block; margin: 0;">📷 رفع / تغيير الغلاف<input type="file" id="coverPhoto" accept="image/*" onchange="processCoverImage(this)" style="position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;"></label>
+                                <button type="button" id="coverRemoveBtn" class="prod-act del" style="display:none; padding: 10px 14px; font-size: 0.8rem;" onclick="removeCoverImage()">إزالة الغلاف</button>
+                            </div>
+                            <div id="coverStatus" class="text-muted fw-bold mt-2" style="font-size: 0.7rem;">الغلاف صورة مستقلة خاصة بمحلك — تظهر ببطاقته وبرأس صفحته عند الزبون، ولا علاقة لها بصور منتجاتك.</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.55); border-radius: 20px; padding: 14px; margin-bottom: 12px;">
                             <div class="fw-black mb-2" id="prodFormTitle" style="font-size: 0.95rem; color: var(--primary-blue-dark);">إضافة منتج</div>
@@ -3670,6 +3679,7 @@
             const f = document.getElementById('shopFrom'), u = document.getElementById('shopTo');
             if (f && document.activeElement !== f) f.value = __shopProfile.from || '';
             if (u && document.activeElement !== u) u.value = __shopProfile.to || '';
+            if (typeof __renderCover === 'function') __renderCover();
         });
     }
     window.toggleShopOpen = async function() {
@@ -3687,6 +3697,62 @@
             await update(ref(db, 'stores/' + phone + '/profile'), { from: f || '', to: u || '' });
             alert('تم حفظ ساعات العمل ✅');
         } catch (e) { alert('تعذّر حفظ الساعات.'); }
+    };
+    /* ── صورة غلاف المحل: حقل مستقل profile.coverImg — لا يمسّ صور المنتجات ── */
+    function __renderCover() {
+        const img = String((__shopProfile || {}).coverImg || '');
+        const prev = document.getElementById('coverPreview');
+        if (!prev) return;
+        const emp = document.getElementById('coverEmpty');
+        const rm = document.getElementById('coverRemoveBtn');
+        if (img) { prev.src = img; prev.style.display = ''; if (emp) emp.style.display = 'none'; if (rm) rm.style.display = ''; }
+        else { prev.style.display = 'none'; if (emp) emp.style.display = ''; if (rm) rm.style.display = 'none'; }
+    }
+    window.processCoverImage = async function(input) {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const phone = __prodPhone();
+        const st = document.getElementById('coverStatus');
+        if (!phone) { if (st) st.textContent = 'سجّل الدخول أولاً.'; input.value = ''; return; }
+        try {
+            if (st) st.textContent = 'جارٍ ضغط صورة الغلاف وحفظها…';
+            let bmp = null;
+            if (window.createImageBitmap) { try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = null; } }
+            let w, h, draw;
+            if (bmp) { w = bmp.width; h = bmp.height; draw = bmp; }
+            else {
+                const url = URL.createObjectURL(file);
+                draw = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+                w = draw.naturalWidth; h = draw.naturalHeight;
+            }
+            if (!w || !h) throw new Error('bad image');
+            let scale = Math.min(1, 900 / Math.max(w, h));
+            let dataUrl = '';
+            for (let attempt = 0; attempt < 4; attempt++) {
+                const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = cw; canvas.height = ch;
+                canvas.getContext('2d').drawImage(draw, 0, 0, cw, ch);
+                let q = 0.82;
+                dataUrl = canvas.toDataURL('image/jpeg', q);
+                while (dataUrl.length > 380000 && q > 0.45) { q -= 0.12; dataUrl = canvas.toDataURL('image/jpeg', q); }
+                if (dataUrl.length <= 380000) break;
+                scale *= 0.75;
+            }
+            if (bmp && bmp.close) bmp.close();
+            await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: dataUrl });
+            if (st) st.textContent = 'تم حفظ صورة الغلاف ✅ — ستظهر للزبون ببطاقة محلك وبرأس صفحته.';
+        } catch (e) {
+            if (st) st.textContent = 'تعذّر حفظ الغلاف — جرّب صورة أخرى.';
+        }
+        input.value = '';
+    };
+    window.removeCoverImage = async function() {
+        const phone = __prodPhone();
+        if (!phone) return alert('سجّل الدخول أولاً.');
+        if (!confirm('إزالة صورة غلاف المحل؟ ستعود بطاقة محلك لعرض صورة أول منتج.')) return;
+        try { await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: null }); }
+        catch (e) { alert('تعذّرت إزالة الغلاف.'); }
     };
     window.toggleProductAvail = async function(id) {
         const phone = __prodPhone();
