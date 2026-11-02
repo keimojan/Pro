@@ -173,6 +173,7 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 #shopSearchRow input{ color:#f5f0ea; } #shopSearchRow input::placeholder{ color:#8f8a84; }
 /* تثبيت الشاشة (طلب علي): لا سحب-للتحديث ولا ارتداد عند الحواف */
 html, body{ overscroll-behavior:none; }
+
 #bnav{ position:fixed; bottom:0; inset-inline:0; background:#211d1a; border-top:1px solid #3a332c; border-radius:22px 22px 0 0; box-shadow:0 -10px 28px rgba(0,0,0,.4); display:flex; align-items:center; z-index:45; padding:6px 8px calc(8px + env(safe-area-inset-bottom)); }
 #bnav button{ flex:1; background:none; border:none; font-family:inherit; font-weight:700; font-size:.68rem; color:#a8a29e; padding:7px 0 5px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
 #bnav button svg{ width:23px; height:23px; }
@@ -548,6 +549,7 @@ function renderPromoCard() {
   if (promoSlides.length > 1) promoTimer = setInterval(() => { promoIdx++; show(); }, 5000);
 }
 function renderShops() {
+  syncAd();
   const el = $('#shopsList');
   if (!shops.length) { el.innerHTML = '<div class="empty">لا توجد مطاعم متاحة حالياً.<br>تأكد من اتصالك وحاول بعد قليل.</div>'; return; }
   const list = shops.slice();
@@ -626,8 +628,10 @@ async function openShop(s) {
     cart = { shopPhone: s.phone, items: {} }; saveJ(K_CART, cart);
   }
   curShop = s; if (cart.shopPhone !== s.phone && !Object.keys(cart.items).length) { cart.shopPhone = s.phone; saveJ(K_CART, cart); }
+  closeMainSearch();
   shopSearchTxt = ''; const ssi = document.getElementById('shopSearchInp'); if (ssi) ssi.value = '';
   $('#shopsView').style.display = 'none'; $('#shopView').style.display = '';
+  syncAd();
   $('#shopTitle').textContent = s.name;
   renderClosedBanner(); renderCartBar();
   $('#prodGrid').innerHTML = '<div class="skl sk-prod"></div><div class="skl sk-prod"></div><div class="skl sk-prod"></div><div class="skl sk-prod"></div>';
@@ -671,9 +675,10 @@ function chQty(id, d) {
   else cart.items[id] = { q: q, price: Number(p.price) || 0, name: String(p.name || '') };
   saveJ(K_CART, cart); renderProducts(); renderCartBar();
 }
-$('#backBtn').addEventListener('click', () => { $('#shopView').style.display = 'none'; $('#shopsView').style.display = ''; curShop = null; shopSearchTxt = ''; const ssi = document.getElementById('shopSearchInp'); if (ssi) ssi.value = ''; renderCartBar(); });
+$('#backBtn').addEventListener('click', () => { $('#shopView').style.display = 'none'; $('#shopsView').style.display = ''; curShop = null; shopSearchTxt = ''; const ssi = document.getElementById('shopSearchInp'); if (ssi) ssi.value = ''; renderCartBar(); syncAd(); });
 const shopSi = document.getElementById('shopSearchInp');
 if (shopSi) shopSi.addEventListener('input', () => { shopSearchTxt = shopSi.value.trim(); renderProducts(); });
+
 
 /* ── السلة والإتمام ── */
 function cartShop() { return shops.find(s => s.phone === cart.shopPhone) || null; }
@@ -943,20 +948,47 @@ renderCartBar();
 renderTrack();
 const si = document.getElementById('searchInp');
 if (si) si.addEventListener('input', () => { searchTxt = si.value.trim(); renderShops(); });
+/* إغلاق بحث القائمة الرئيسية: إخفاء الحقل وتصفيره وإرجاع بطاقة
+   الإعلانات — حتى لا يتسرّب شريط البحث إلى صفحة محل أو الطلبات */
+function closeMainSearch() {
+  const row = document.getElementById('searchRow'), i = document.getElementById('searchInp');
+  if (row && row.style.display !== 'none') {
+    row.style.display = 'none';
+    if (i) i.value = '';
+    if (searchTxt) { searchTxt = ''; renderShops(); }
+  }
+  syncAd();
+}
+/* صورة الإعلان في الأعلى (طلب علي): ظاهرة فقط بصنف «الكل» بالقائمة
+   الرئيسية، وتختفي عند اختيار أي صنف آخر (مطاعم/مرطبات/…) وداخل
+   صفحة أي متجر أو مطعم وأثناء فتح البحث — وترجع بالضغط على «الكل» */
+function syncAd() {
+  const ad = document.getElementById('adSlider');
+  if (!ad) return;
+  const sv = document.getElementById('shopView');
+  const shopOpen = !!curShop && sv && sv.style.display !== 'none';
+  const row = document.getElementById('searchRow');
+  const searchOpen = !!row && row.style.display !== 'none';
+  ad.style.display = (shopOpen || searchOpen || selCat !== 'الكل') ? 'none' : '';
+}
 document.querySelectorAll('#bnav button').forEach(b => b.addEventListener('click', () => {
   const k = b.dataset.nav;
   if (k === 'cart') { if (cartCount()) openSheet(); else toast('سلتك فارغة — أضف أصنافاً من أي محل'); return; }
   document.querySelectorAll('#bnav button').forEach(x => x.classList.toggle('on', x === b));
+  if (k !== 'search') closeMainSearch();
   if (k === 'home') { stopCapPoll(); if (curShop) $('#backBtn').click(); showOnly('shopsView'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   else if (k === 'search') {
     if (curShop) $('#backBtn').click();
     showOnly('shopsView');
-    const row = document.getElementById('searchRow'), i = document.getElementById('searchInp');
+    const row = document.getElementById('searchRow');
     if (row) {
       const show = row.style.display === 'none';
       row.style.display = show ? 'flex' : 'none';
-      if (show && i) { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); i.focus({ preventScroll: true }); }
-      if (!show && i) { i.value = ''; searchTxt = ''; renderShops(); }
+      /* عند فتح البحث تختفي بطاقة الإعلانات في الأعلى (طلب علي)،
+         ولوحة المفاتيح لا تظهر من نفسها — تظهر فقط عندما يضغط
+         الزبون حقل البحث نفسه. وعند الإغلاق ترجع البطاقة. */
+      if (show) { syncAd(); row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      else closeMainSearch();
     }
   }
   else if (k === 'orders') { openOrders(); }
@@ -969,6 +1001,7 @@ function stopCapPoll() { if (capTimer) { clearInterval(capTimer); capTimer = nul
 function showOnly(id) {
   ['shopsView', 'shopView', 'ordersView', 'mapView'].forEach(v => { const el = document.getElementById(v); if (el) el.style.display = (v === id) ? '' : 'none'; });
   if (id !== 'mapView') stopCapPoll();
+  syncAd();
 }
 function ordStateTxt(r) {
   if (r.state === 'delivered') return ['تم التوصيل', 'done'];
