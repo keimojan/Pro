@@ -229,6 +229,10 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 .ordrow{ display:flex; justify-content:space-between; font-size:.8rem; padding:2px 0; color:var(--mut); }
 .ordrow.disc{ color:#4ade80; }
 .ordrow.grand{ border-top:1px solid var(--line); margin-top:5px; padding-top:6px; color:var(--ink); font-weight:900; font-size:.88rem; }
+.admct{ margin-top:16px; border-top:1px dashed var(--line); padding-top:12px; text-align:center; }
+.admct .t{ color:var(--mut); font-weight:800; font-size:.82rem; margin-bottom:6px; }
+.admct .n{ display:block; color:#fdba74; font-weight:900; font-size:1.12rem; letter-spacing:.5px; text-decoration:none; direction:ltr; }
+.admct .wa{ display:inline-block; margin-top:9px; background:#22c55e; color:#fff; font-weight:900; font-size:.82rem; border-radius:999px; padding:7px 16px; text-decoration:none; }
 #capMap{ height:320px; min-height:260px; border-radius:18px; border:1px solid var(--line); position:relative; z-index:1; background:#262019; }
 .capinfo{ margin-top:10px; background:#1d1916; border:1px solid var(--line); border-radius:14px; padding:11px 13px; font-size:.84rem; font-weight:700; }
 .shopgrid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -356,6 +360,11 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
       <div style="font-weight:800;font-size:1rem" id="auWho"></div>
       <div style="color:var(--mut);font-weight:700;margin-top:4px" id="auPhoneShow"></div>
       <button class="btn btn-ghost" id="logoutBtn" type="button" style="width:100%;margin-top:14px">تسجيل الخروج</button>
+    </div>
+    <div class="admct">
+      <div class="t">للتواصل مع الإدارة</div>
+      <a class="n" href="tel:+9647829159176">07829159176</a>
+      <a class="wa" href="https://wa.me/9647829159176" target="_blank" rel="noopener">💬 واتساب</a>
     </div>
     <button class="btn btn-ghost" id="closeAuth" type="button" style="width:100%; margin-top:8px;">رجوع</button>
   </div>
