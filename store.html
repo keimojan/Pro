@@ -169,6 +169,8 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 .addots i.on{ width:18px; background:#f97316; }
 #searchRow{ background:#292524; border:1px solid #3a332c; margin:12px 0 2px; }
 #searchRow input{ color:#f5f0ea; } #searchRow input::placeholder{ color:#8f8a84; }
+#shopSearchRow{ background:#292524; border:1px solid #3a332c; margin:10px 0 12px; }
+#shopSearchRow input{ color:#f5f0ea; } #shopSearchRow input::placeholder{ color:#8f8a84; }
 #bnav{ position:fixed; bottom:0; inset-inline:0; background:#211d1a; border-top:1px solid #3a332c; border-radius:22px 22px 0 0; box-shadow:0 -10px 28px rgba(0,0,0,.4); display:flex; align-items:center; z-index:45; padding:6px 8px calc(8px + env(safe-area-inset-bottom)); }
 #bnav button{ flex:1; background:none; border:none; font-family:inherit; font-weight:700; font-size:.68rem; color:#a8a29e; padding:7px 0 5px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
 #bnav button svg{ width:23px; height:23px; }
@@ -292,6 +294,7 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
     <button class="backbtn" id="backBtn" type="button">→ كل المطاعم</button>
     <div class="sec-title" id="shopTitle"></div>
     <div id="closedBanner"></div>
+    <div class="searchbar" id="shopSearchRow"><span>🔍</span><input id="shopSearchInp" type="text" placeholder="ابحث عن منتج داخل هذا المحل…"></div>
     <div class="grid" id="prodGrid"></div>
   </section>
   <section id="ordersView" style="display:none">
@@ -409,6 +412,7 @@ const K_ID = 'pro_cust_id_v2', K_ORD = 'pro_cust_orders_v2', K_CART = 'pro_cust_
 let identity = loadJ(K_ID, null);                 // {name, phone, verified, session}
 if (identity) { identity.verified = !!identity.verified; identity.session = identity.session || ''; }
 let shops = [], curShop = null, curProducts = {};
+let shopSearchTxt = '';
 let promos = [];
 let cart = loadJ(K_CART, { shopPhone: '', items: {} });  // items: {pid:{q,price,name}}
 let activeOrders = loadJ(K_ORD, []);              // [{id, shopPhone, shopName, ts}]
@@ -620,6 +624,7 @@ async function openShop(s) {
     cart = { shopPhone: s.phone, items: {} }; saveJ(K_CART, cart);
   }
   curShop = s; if (cart.shopPhone !== s.phone && !Object.keys(cart.items).length) { cart.shopPhone = s.phone; saveJ(K_CART, cart); }
+  shopSearchTxt = ''; const ssi = document.getElementById('shopSearchInp'); if (ssi) ssi.value = '';
   $('#shopsView').style.display = 'none'; $('#shopView').style.display = '';
   $('#shopTitle').textContent = s.name;
   renderClosedBanner(); renderCartBar();
@@ -638,8 +643,11 @@ function renderClosedBanner() {
   b.innerHTML = '<div class="banner-closed">' + line + '</div>';
 }
 function renderProducts() {
-  const g = $('#prodGrid'); const ids = Object.keys(curProducts);
-  if (!ids.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1">لا منتجات مضافة بعد عند هذا المطعم.</div>'; return; }
+  const g = $('#prodGrid');
+  const allIds = Object.keys(curProducts);
+  if (!allIds.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1">لا منتجات مضافة بعد عند هذا المطعم.</div>'; return; }
+  const ids = shopSearchTxt ? allIds.filter(id => String((curProducts[id] || {}).name || '').includes(shopSearchTxt)) : allIds;
+  if (!ids.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1">لا منتجات مطابقة لـ«' + esc(shopSearchTxt) + '» داخل هذا المحل.</div>'; return; }
   g.innerHTML = ids.map(id => {
     const p = curProducts[id] || {}; const off = p.available === false;
     const q = cart.shopPhone === curShop.phone && cart.items[id] ? cart.items[id].q : 0;
@@ -661,7 +669,9 @@ function chQty(id, d) {
   else cart.items[id] = { q: q, price: Number(p.price) || 0, name: String(p.name || '') };
   saveJ(K_CART, cart); renderProducts(); renderCartBar();
 }
-$('#backBtn').addEventListener('click', () => { $('#shopView').style.display = 'none'; $('#shopsView').style.display = ''; curShop = null; renderCartBar(); });
+$('#backBtn').addEventListener('click', () => { $('#shopView').style.display = 'none'; $('#shopsView').style.display = ''; curShop = null; shopSearchTxt = ''; const ssi = document.getElementById('shopSearchInp'); if (ssi) ssi.value = ''; renderCartBar(); });
+const shopSi = document.getElementById('shopSearchInp');
+if (shopSi) shopSi.addEventListener('input', () => { shopSearchTxt = shopSi.value.trim(); renderProducts(); });
 
 /* ── السلة والإتمام ── */
 function cartShop() { return shops.find(s => s.phone === cart.shopPhone) || null; }
