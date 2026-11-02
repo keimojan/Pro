@@ -265,9 +265,6 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 
 <div class="wrap">
   <div class="searchbar" id="searchRow" style="display:none"><span>🔍</span><input id="searchInp" type="text" placeholder="ابحث عن مطعم أو محل…"></div>
-  <!-- تتبع الطلبات النشطة -->
-  <div id="trackZone"></div>
-
   <!-- قائمة المطاعم -->
   <section id="shopsView">
     <div class="promo" id="promoCard"><div><div class="pt" id="promoT">كل محلات منطقتك بمكان واحد</div><div class="ps" id="promoS">مطاعم ومرطبات وخضراوات وقطع غيار — بأجور كل محل نفسه</div></div><div class="bdg">سوق PRO</div></div>
@@ -290,6 +287,9 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
   <section id="ordersView" style="display:none">
     <button class="backbtn" id="ordersBack" type="button">→ رجوع</button>
     <div class="sec-title">طلباتي</div>
+    <!-- بطاقة تتبّع الطلب النشط نُقلت إلى هنا من الرئيسية (طلب علي):
+         تظهر أعلى «طلباتي» فوق قائمة الطلبات، والرئيسية بلا بطاقة طلب. -->
+    <div id="trackZone"></div>
     <div id="ordersList"></div>
   </section>
   <section id="mapView" style="display:none">
