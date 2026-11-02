@@ -6,6 +6,8 @@
 <title>سوق PRO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{ --or:#f97316; --or2:#ea580c; --ink:#1c1917; --mut:#78716c; --bg:#faf7f4; --card:#fff; --line:#f0e7df; --ok:#16a34a; --bad:#dc2626; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -212,6 +214,16 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 .sk-cats{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
 .sk-cat{ aspect-ratio:.92; }
 .sk-prod{ height:158px; }
+.ordcard{ background:#1d1916; border:1px solid var(--line); border-radius:16px; padding:13px 14px; margin-bottom:10px; }
+.ordtop{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.ordmeta{ color:var(--mut); font-size:.76rem; font-weight:700; margin-top:3px; }
+.ordchip{ font-size:.72rem; font-weight:900; border-radius:999px; padding:4px 10px; white-space:nowrap; }
+.ordchip.act{ background:rgba(249,115,22,.16); color:#fdba74; border:1px solid rgba(249,115,22,.45); }
+.ordchip.done{ background:rgba(34,197,94,.14); color:#4ade80; border:1px solid rgba(34,197,94,.4); }
+.ordchip.canc{ background:rgba(239,68,68,.12); color:#f87171; border:1px solid rgba(239,68,68,.4); }
+.ordtrack{ margin-top:10px; width:100%; background:linear-gradient(135deg,#f97316,#ea580c); color:#fff; border:0; border-radius:12px; padding:10px; font-family:inherit; font-weight:900; font-size:.85rem; cursor:pointer; }
+#capMap{ height:56vh; min-height:320px; border-radius:18px; border:1px solid var(--line); position:relative; z-index:1; background:#262019; }
+.capinfo{ margin-top:10px; background:#1d1916; border:1px solid var(--line); border-radius:14px; padding:11px 13px; font-size:.84rem; font-weight:700; }
 .shopgrid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .shoptile{ position:relative; background:#211d1a; border:1px solid var(--line); border-radius:18px; overflow:hidden; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.3); }
 .shoptile img{ width:100%; aspect-ratio:1.2; object-fit:cover; display:block; }
@@ -267,6 +279,17 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
     <div class="sec-title" id="shopTitle"></div>
     <div id="closedBanner"></div>
     <div class="grid" id="prodGrid"></div>
+  </section>
+  <section id="ordersView" style="display:none">
+    <button class="backbtn" id="ordersBack" type="button">→ رجوع</button>
+    <div class="sec-title">طلباتي</div>
+    <div id="ordersList"></div>
+  </section>
+  <section id="mapView" style="display:none">
+    <button class="backbtn" id="mapBack" type="button">→ طلباتي</button>
+    <div class="sec-title">تتبّع الكابتن</div>
+    <div id="capMap"></div>
+    <div id="capInfo" class="capinfo">جارٍ جلب موقع الكابتن…</div>
   </section>
 </div>
 
@@ -802,7 +825,7 @@ function startPulses() {
    النموذج: اسم + هاتف + كلمة سر؛ الجلسة توكن خادمي يُحفظ هنا،
    والتوثيق (كود واتساب) طبقة لاحقة فوق هذا النموذج نفسه. */
 let authMode = 'login';
-function loggedIn() { return !!(identity && identity.session && (!identity.sessionExp || identity.sessionExp > Date.now())); }
+function loggedIn() { return !!(identity && identity.session); }
 function updAcct() { const nl = document.getElementById('navAcctLab'); if (nl) nl.textContent = loggedIn() && identity.name ? identity.name : 'حسابي'; }
 function setAuthMode(m) {
   authMode = m;
@@ -887,9 +910,10 @@ document.querySelectorAll('#bnav button').forEach(b => b.addEventListener('click
   const k = b.dataset.nav;
   if (k === 'cart') { if (cartCount()) openSheet(); else toast('سلتك فارغة — أضف أصنافاً من أي محل'); return; }
   document.querySelectorAll('#bnav button').forEach(x => x.classList.toggle('on', x === b));
-  if (k === 'home') { if (curShop) $('#backBtn').click(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  if (k === 'home') { stopCapPoll(); if (curShop) $('#backBtn').click(); showOnly('shopsView'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   else if (k === 'search') {
     if (curShop) $('#backBtn').click();
+    showOnly('shopsView');
     const row = document.getElementById('searchRow'), i = document.getElementById('searchInp');
     if (row) {
       const show = row.style.display === 'none';
@@ -898,9 +922,104 @@ document.querySelectorAll('#bnav button').forEach(b => b.addEventListener('click
       if (!show && i) { i.value = ''; searchTxt = ''; renderShops(); }
     }
   }
-  else if (k === 'orders') { const z = document.getElementById('trackZone'); if (z) z.scrollIntoView({ behavior: 'smooth' }); }
+  else if (k === 'orders') { openOrders(); }
   else if (k === 'acct') { openAuth(); }
 }));
+/* ── «طلباتي» من الخادم + تتبّع الكابتن على الخريطة ── */
+let capTimer = null, capMap = null, capMk = {}, capFitted = false, capOrderId = '', ordReturn = 'shopsView';
+let capLine = null, capLineCase = null;
+function stopCapPoll() { if (capTimer) { clearInterval(capTimer); capTimer = null; } }
+function showOnly(id) {
+  ['shopsView', 'shopView', 'ordersView', 'mapView'].forEach(v => { const el = document.getElementById(v); if (el) el.style.display = (v === id) ? '' : 'none'; });
+  if (id !== 'mapView') stopCapPoll();
+}
+function ordStateTxt(r) {
+  if (r.state === 'delivered') return ['تم التوصيل', 'done'];
+  if (r.state === 'cancelled') return [r.cancelSource === 'restaurant' ? 'تم إلغاء الطلب من المطعم' : r.cancelSource === 'withdrawn' ? 'تم سحب الطلب' : 'أُلغي الطلب', 'canc'];
+  return [STEP_TXT[Math.max(0, Math.min(2, (r.step || 1) - 1))], 'act'];
+}
+async function openOrders() {
+  if (!identity.session) { toast('سجّل دخولك لعرض طلباتك'); openAuth(); return; }
+  ordReturn = curShop ? 'shopView' : 'shopsView';
+  showOnly('ordersView');
+  const box = $('#ordersList');
+  box.innerHTML = '<div class="sk-wrap"><div class="skl" style="height:74px"></div><div class="skl" style="height:74px"></div><div class="skl" style="height:74px"></div></div>';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  try {
+    const r = await gsCall({ action: 'CUSTOMER_ORDERS', identity: { phone: identity.phone, session: identity.session } });
+    if (!r.success) { box.innerHTML = '<div class="empty">' + esc(r.msg || 'تعذّر جلب طلباتك') + '</div>'; return; }
+    const list = r.orders || [];
+    if (!list.length) { box.innerHTML = '<div class="empty">لا توجد طلبات بعد — اطلب من أي محل وستظهر طلباتك هنا</div>'; return; }
+    box.innerHTML = list.map(o => {
+      const st = ordStateTxt(o);
+      const dt = o.ts ? new Date(o.ts).toLocaleString('ar') : '';
+      let btn = '';
+      if (o.state === 'active' && o.hasCaptain) btn = '<button class="ordtrack" type="button" data-track="' + esc(o.id) + '">تتبّع الكابتن على الخريطة</button>';
+      else if (o.state === 'active') btn = '<div class="ordmeta" style="margin-top:8px">جارٍ تعيين الكابتن…</div>';
+      return '<div class="ordcard"><div class="ordtop"><b>' + esc(o.shopName) + '</b><span class="ordchip ' + st[1] + '">' + st[0] + '</span></div>' +
+        '<div class="ordmeta">' + esc(dt) + (o.area ? ' • ' + esc(o.area) : '') + '</div>' +
+        '<div class="ordmeta">الإجمالي: <b>' + fmt(o.price) + '</b>' + (o.driverName ? ' • الكابتن: ' + esc(o.driverName) : '') + '</div>' + btn + '</div>';
+    }).join('');
+    box.querySelectorAll('[data-track]').forEach(b => b.addEventListener('click', () => openCapMap(b.dataset.track)));
+  } catch (e) { box.innerHTML = '<div class="empty">خطأ بالاتصال — حاول مجدداً</div>'; }
+}
+$('#ordersBack').addEventListener('click', () => showOnly(ordReturn));
+$('#mapBack').addEventListener('click', () => showOnly('ordersView'));
+function capAgo(iso) {
+  if (!iso) return '';
+  const t = new Date(iso).getTime(); if (!t) return '';
+  const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  return sec < 60 ? 'قبل ' + sec + ' ثانية' : 'قبل ' + Math.round(sec / 60) + ' دقيقة';
+}
+function openCapMap(oid) {
+  capOrderId = oid; capFitted = false;
+  showOnly('mapView');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  $('#capInfo').textContent = 'جارٍ جلب موقع الكابتن…';
+  if (!window.L) { $('#capInfo').textContent = 'تعذّر تحميل الخريطة — تحقق من الاتصال وحاول مجدداً'; return; }
+  if (!capMap) {
+    capMap = L.map('capMap').setView([35.5, 44.5], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(capMap);
+  }
+  if (capLine && capMap) { try { capMap.removeLayer(capLine); capMap.removeLayer(capLineCase); } catch (e) {} capLine = capLineCase = null; }
+  setTimeout(() => { if (capMap) capMap.invalidateSize(); }, 90);
+  pollCaptain();
+  capTimer = setInterval(pollCaptain, 10000);
+}
+function capSet(key, lat, lng, color, label) {
+  if (capMk[key]) { capMk[key].setLatLng([lat, lng]); return; }
+  capMk[key] = L.circleMarker([lat, lng], { radius: 10, color: '#fff', weight: 2.5, fillColor: color, fillOpacity: 1 }).addTo(capMap)
+    .bindTooltip(label, { permanent: true, direction: 'top', offset: [0, -12] });
+}
+async function pollCaptain() {
+  try {
+    const r = await gsCall({ action: 'CAPTAIN_LOCATION', orderId: capOrderId, identity: { phone: identity.phone, session: identity.session } });
+    const info = $('#capInfo'); if (!info) return;
+    if (!r.success) { info.textContent = r.msg || 'تعذّر جلب الموقع'; return; }
+    if (!r.assigned) { info.textContent = 'لم يُعيّن كابتن لهذا الطلب بعد'; return; }
+    const pts = [];
+    if (r.resLat && r.resLng) { capSet('shop', r.resLat, r.resLng, '#a8a29e', 'المحل'); pts.push([r.resLat, r.resLng]); }
+    if (r.custLat && r.custLng) { capSet('cust', r.custLat, r.custLng, '#38bdf8', 'موقعك'); pts.push([r.custLat, r.custLng]); }
+    if (r.available) {
+      capSet('cap', r.lat, r.lng, '#f97316', 'الكابتن'); pts.push([r.lat, r.lng]);
+      /* 🧭 مسار الكابتن الذي قبل الطلب: خطٌّ حيّ بين موقعه وموقع الزبون،
+         يتحرك معه عند كل نبضة (١٠ ثوانٍ). */
+      if (r.custLat && r.custLng) {
+        const seg = [[r.lat, r.lng], [r.custLat, r.custLng]];
+        if (capLine) { capLine.setLatLngs(seg); capLineCase.setLatLngs(seg); }
+        else {
+          capLineCase = L.polyline(seg, { color: '#ffffff', weight: 7, opacity: .85 }).addTo(capMap);
+          capLine = L.polyline(seg, { color: '#f97316', weight: 4, opacity: .95 }).addTo(capMap);
+        }
+      }
+      info.innerHTML = 'الكابتن: <b>' + esc(r.driverName || '') + '</b>' + (r.lastUpdate ? ' — آخر تحديث ' + esc(capAgo(r.lastUpdate)) : '');
+    } else {
+      info.textContent = 'الكابتن: ' + (r.driverName || '') + ' — موقعه غير متاح هذه اللحظة';
+    }
+    if (pts.length && !capFitted) { capFitted = true; capMap.fitBounds(pts, { padding: [30, 30] }); }
+  } catch (e) {}
+}
+
 /* سلايدر الإعلانات: تمرير تلقائي */
 (function(){
   const tr = document.getElementById('adTrack'); if (!tr) return;
