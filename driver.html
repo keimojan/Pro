@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.10-CustPin";
+  const CURRENT_APP_VERSION = "16.11-Items";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -313,6 +313,14 @@ select.inp-clay{appearance:none;-webkit-appearance:none;cursor:pointer;
 .rp.dn::before{border-color:var(--ok);}
 .rp-t{font-size:.66rem;font-weight:800;color:var(--muted);margin-bottom:3px;}
 .rp-n{font-size:1.02rem;font-weight:800;color:var(--ink);line-height:1.35;}
+.it-box{background:var(--clay);border-radius:14px;padding:11px 13px;margin:2px 0 14px;}
+.it-h{font-size:.8rem;font-weight:900;color:var(--royal-dp);margin-bottom:8px;}
+.it-r{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;font-size:.86rem;font-weight:800;color:var(--ink);}
+.it-r + .it-r{border-top:1px dashed var(--line);}
+.it-n{flex:1;text-align:right;}
+.it-q{color:var(--royal-dp);font-weight:900;white-space:nowrap;}
+.it-p{white-space:nowrap;font-variant-numeric:tabular-nums;}
+.it-r.it-t{font-weight:900;color:var(--royal-dp);}
 .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px;}
 .act{flex:1;min-width:84px;padding:10px 8px;border-radius:10px;cursor:pointer;font-family:'Cairo',sans-serif;
   font-size:.78rem;font-weight:800;display:flex;align-items:center;justify-content:center;gap:5px;
@@ -901,6 +909,7 @@ window.__SND={alert:"UklGRvaoAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YdKoAAA
     <div class="al-r"><span class="al-k">المطعم</span><span class="al-v" id="alRes">---</span></div>
     <div class="al-r"><span class="al-k">المنطقة</span><span class="al-v ar" id="alArea">---</span></div>
     <div class="al-r"><span class="al-k">قيمة الفاتورة</span><span class="al-v pr" id="alPrice">---</span></div>
+    <div id="alItems" style="display:none"></div>
   </div>
   <div>
     <button class="btn-mute" onclick="muteAlarm()"><svg class="si" viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M11 5L6 9H2v6h4l5 4V5z"/></svg>إسكات الصوت</button>
@@ -2718,7 +2727,7 @@ function listenOrders(){
                   : st==='arrived_at_res' ? 'arrived' : 'heading';
         const srvMs = f.last_update ? new Date(f.last_update).getTime() : Date.now();
         active.push({id:oid,resName:f.restaurant||'',resArea:f.resArea||null,
-          details:String(f.details||''),price:parseFloat(f.price)||0,area:f.area||'غير محدد',
+          details:String(f.details||''),items:Array.isArray(f.items)?f.items:null,itemsTotal:parseFloat(f.items_total)||0,price:parseFloat(f.price)||0,area:f.area||'غير محدد',
           state:st2,photoUrl:f.photoUrl||'',resPhone:f.resPhone||'غير متوفر',
           resLat:f.resLat,resLng:f.resLng,custLat:f.custLat||null,custLng:f.custLng||null,comm:f.comm||0,payType:f.payType||'المطعم يدفع',
           acceptedTime:srvMs,
@@ -2754,7 +2763,7 @@ function listenOrders(){
         if(!mine)return;
         if(active.find(o=>String(o.id)===String(f.id))){if(!f.is_sovereign){guaranteeAccept(f.id);stopAlarm();return;}}
         if(curOrder&&String(curOrder.id)===String(f.id))return;
-        curOrder={id:f.id,resName:f.restaurant,area:f.area||'غير محدد',price:f.price||0,details:f.details||'',
+        curOrder={id:f.id,resName:f.restaurant,area:f.area||'غير محدد',price:f.price||0,details:f.details||'',items:Array.isArray(f.items)?f.items:null,itemsTotal:parseFloat(f.items_total)||0,
           photoUrl:f.photoUrl||'',resLat:f.resLat,resLng:f.resLng,custLat:f.custLat||null,custLng:f.custLng||null,resPhone:f.resPhone,resArea:f.resArea||null,
           comm:f.comm||0,payType:f.payType||'المطعم يدفع',is_sovereign:f.is_sovereign||false};
         const age=f.last_update?Math.max(0,Date.now()-new Date(f.last_update).getTime()):0;
@@ -2764,6 +2773,8 @@ function listenOrders(){
         document.getElementById('alRes').innerText=f.restaurant;
         document.getElementById('alArea').innerText=f.area||'غير محدد';
         document.getElementById('alPrice').innerHTML=`${f.price||0} <small style="font-size:.8rem;color:var(--muted);">د.ع</small>`;
+        const _ai=document.getElementById('alItems'); const _ih=itemsBox(curOrder);
+        if(_ai){_ai.innerHTML=_ih; _ai.style.display=_ih?'':'none';}
         document.getElementById('alertOv').classList.remove('dn');
         if(window.AndroidRadar)window.AndroidRadar.triggerOrderAlarm();
         else startAlarm(active.length?'double':'alert');
@@ -2856,7 +2867,7 @@ window.acceptOrder=async function(){
 };
 function finalizeAccept(){
   document.getElementById('alertOv').classList.add('dn');
-  const o={id:curOrder.id,resName:curOrder.resName,resArea:curOrder.resArea||null,details:String(curOrder.details),
+  const o={id:curOrder.id,resName:curOrder.resName,resArea:curOrder.resArea||null,details:String(curOrder.details),items:Array.isArray(curOrder.items)?curOrder.items:null,itemsTotal:parseFloat(curOrder.itemsTotal)||0,
     price:parseFloat(curOrder.price)||0,area:curOrder.area,state:'heading',photoUrl:curOrder.photoUrl,
     resPhone:curOrder.resPhone,resLat:curOrder.resLat,resLng:curOrder.resLng,custLat:curOrder.custLat||null,custLng:curOrder.custLng||null,
     comm:curOrder.comm||0,payType:curOrder.payType||'المطعم يدفع',
@@ -3002,6 +3013,22 @@ const ICO={
  clk:'<svg class="si si-xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
  bell:'<svg class="si si-s" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
 };
+/* 🧾 أصناف طلب المتجر للكابتن (طلب علي 2026-11-02): الأصناف بيانات
+   هيكلية بحقل items بعقدة الطلب ولا تدخل نص التفاصيل إطلاقاً، فكانت
+   لوحة المطعم وحدها تعرضها. هذا الصندوق يعرضها للكابتن من نفس الحقل
+   للمطابقة عند الاستلام — بلا أي تغيير بالخادم. طلب بلا items (مطعم
+   عادي) لا يرسم شيئاً. */
+function itemsBox(o){
+  const it=(o&&Array.isArray(o.items))?o.items:null;
+  if(!it||!it.length)return '';
+  let rows='',sum=0;
+  it.forEach(x=>{
+    const q=Number(x&&x.qty)||0, p=Number(x&&x.price)||0, lt=q*p; sum+=lt;
+    rows+=`<div class="it-r"><span class="it-n">${esc((x&&x.name)||'')}</span><span class="it-q">×${q}</span><span class="it-p">${num(lt).toLocaleString('ar-EG')} د.ع</span></div>`;
+  });
+  const tot=Number(o.itemsTotal)>0?Number(o.itemsTotal):sum;
+  return `<div class="it-box"><div class="it-h">🧾 أصناف الطلب — للمطابقة عند الاستلام</div>${rows}<div class="it-r it-t"><span class="it-n">مجموع الأصناف</span><span class="it-p">${num(tot).toLocaleString('ar-EG')} د.ع</span></div></div>`;
+}
 function renderOrders(){
   const box=document.getElementById('orderBox'), rad=document.getElementById('radar');
   if(!active.length){rad.style.display='';box.innerHTML='';lastHtml='e';return;}
@@ -3058,6 +3085,7 @@ function renderOrders(){
               ${photo}
             </div></div>
         </div>
+        ${itemsBox(o)}
         <button class="cta ${bCls}" ${dis} onclick="orderAction('${sid(o.id)}','${sid(act)}',this)">${bTxt}</button>
       </div></div>`;
   });
