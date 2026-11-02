@@ -222,7 +222,14 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 .ordchip.done{ background:rgba(34,197,94,.14); color:#4ade80; border:1px solid rgba(34,197,94,.4); }
 .ordchip.canc{ background:rgba(239,68,68,.12); color:#f87171; border:1px solid rgba(239,68,68,.4); }
 .ordtrack{ margin-top:10px; width:100%; background:linear-gradient(135deg,#f97316,#ea580c); color:#fff; border:0; border-radius:12px; padding:10px; font-family:inherit; font-weight:900; font-size:.85rem; cursor:pointer; }
-#capMap{ height:56vh; min-height:320px; border-radius:18px; border:1px solid var(--line); position:relative; z-index:1; background:#262019; }
+.ordtgl{ margin-top:9px; background:none; border:1px solid var(--line); color:var(--mut); border-radius:10px; padding:6px 12px; font-family:inherit; font-weight:800; font-size:.76rem; cursor:pointer; }
+.orddet{ margin-top:10px; border-top:1px dashed var(--line); padding-top:9px; }
+.orditem{ display:flex; justify-content:space-between; gap:10px; font-size:.82rem; padding:3px 0; color:var(--ink); }
+.orditem span:first-child{ color:var(--mut); }
+.ordrow{ display:flex; justify-content:space-between; font-size:.8rem; padding:2px 0; color:var(--mut); }
+.ordrow.disc{ color:#4ade80; }
+.ordrow.grand{ border-top:1px solid var(--line); margin-top:5px; padding-top:6px; color:var(--ink); font-weight:900; font-size:.88rem; }
+#capMap{ height:320px; min-height:260px; border-radius:18px; border:1px solid var(--line); position:relative; z-index:1; background:#262019; }
 .capinfo{ margin-top:10px; background:#1d1916; border:1px solid var(--line); border-radius:14px; padding:11px 13px; font-size:.84rem; font-weight:700; }
 .shopgrid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .shoptile{ position:relative; background:#211d1a; border:1px solid var(--line); border-radius:18px; overflow:hidden; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.3); }
@@ -938,6 +945,16 @@ function ordStateTxt(r) {
   if (r.state === 'cancelled') return [r.cancelSource === 'restaurant' ? 'تم إلغاء الطلب من المطعم' : r.cancelSource === 'withdrawn' ? 'تم سحب الطلب' : 'أُلغي الطلب', 'canc'];
   return [STEP_TXT[Math.max(0, Math.min(2, (r.step || 1) - 1))], 'act'];
 }
+function ordDetails(o) {
+  const items = (o.items || []).filter(it => it && it.name);
+  if (!items.length && !(o.itemsTotal > 0)) return '';
+  let h = items.map(it => '<div class="orditem"><span>' + esc(it.name) + ' ×' + (Number(it.qty) || 1) + '</span><b>' + fmt((Number(it.price) || 0) * (Number(it.qty) || 1)) + '</b></div>').join('');
+  if (o.itemsTotal > 0) h += '<div class="ordrow"><span>مجموع المنتجات</span><span>' + fmt(o.itemsTotal) + '</span></div>';
+  if (o.deliveryFee > 0) h += '<div class="ordrow"><span>أجور التوصيل</span><span>' + fmt(o.deliveryFee) + '</span></div>';
+  if (o.promoDiscount > 0) h += '<div class="ordrow disc"><span>خصم' + (o.promoTitle ? ' (' + esc(o.promoTitle) + ')' : '') + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>';
+  h += '<div class="ordrow grand"><span>الإجمالي</span><span>' + fmt(o.price) + '</span></div>';
+  return h;
+}
 async function openOrders() {
   if (!identity.session) { toast('سجّل دخولك لعرض طلباتك'); openAuth(); return; }
   ordReturn = curShop ? 'shopView' : 'shopsView';
@@ -956,21 +973,41 @@ async function openOrders() {
       let btn = '';
       if (o.state === 'active' && o.hasCaptain) btn = '<button class="ordtrack" type="button" data-track="' + esc(o.id) + '">تتبّع الكابتن على الخريطة</button>';
       else if (o.state === 'active') btn = '<div class="ordmeta" style="margin-top:8px">جارٍ تعيين الكابتن…</div>';
+      const det = ordDetails(o);
+      const open = o.state === 'active';
+      const detHtml = det ? '<button class="ordtgl" type="button" data-tgl>تفاصيل الطلب ' + (open ? '▴' : '▾') + '</button><div class="orddet" data-det' + (open ? '' : ' style="display:none"') + '>' + det + '</div>' : '';
       return '<div class="ordcard"><div class="ordtop"><b>' + esc(o.shopName) + '</b><span class="ordchip ' + st[1] + '">' + st[0] + '</span></div>' +
         '<div class="ordmeta">' + esc(dt) + (o.area ? ' • ' + esc(o.area) : '') + '</div>' +
-        '<div class="ordmeta">الإجمالي: <b>' + fmt(o.price) + '</b>' + (o.driverName ? ' • الكابتن: ' + esc(o.driverName) : '') + '</div>' + btn + '</div>';
+        '<div class="ordmeta">الإجمالي: <b>' + fmt(o.price) + '</b>' + (o.driverName ? ' • الكابتن: ' + esc(o.driverName) : '') + '</div>' + detHtml + btn + '</div>';
     }).join('');
     box.querySelectorAll('[data-track]').forEach(b => b.addEventListener('click', () => openCapMap(b.dataset.track)));
+    box.querySelectorAll('[data-tgl]').forEach(b => b.addEventListener('click', () => {
+      const d = b.parentElement.querySelector('[data-det]'); if (!d) return;
+      const show = d.style.display === 'none';
+      d.style.display = show ? '' : 'none';
+      b.textContent = 'تفاصيل الطلب ' + (show ? '▴' : '▾');
+    }));
   } catch (e) { box.innerHTML = '<div class="empty">خطأ بالاتصال — حاول مجدداً</div>'; }
 }
 $('#ordersBack').addEventListener('click', () => showOnly(ordReturn));
 $('#mapBack').addEventListener('click', () => showOnly('ordersView'));
+/* مسافة ووقت وصول تقريبيان بين نقطتين: خط مستقيم × ١٫٣ (التفاف
+   الطرق) بسرعة مدينة متوسطة ٢٤ كم/سا — تقدير استرشادي لا وعد دقيق. */
+function capEta(lat1, lng1, lat2, lng2) {
+  const R = 6371, dLa = (lat2 - lat1) * Math.PI / 180, dLn = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLn / 2) * Math.sin(dLn / 2);
+  const straight = 2 * R * Math.asin(Math.sqrt(a));
+  const road = straight * 1.3;
+  return { km: road, mins: Math.max(1, Math.round(road / 24 * 60)) };
+}
 function capAgo(iso) {
   if (!iso) return '';
   const t = new Date(iso).getTime(); if (!t) return '';
   const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
   return sec < 60 ? 'قبل ' + sec + ' ثانية' : 'قبل ' + Math.round(sec / 60) + ' دقيقة';
 }
+/* خريطة التتبّع مجانية (Leaflet/OpenStreetMap) بقرار علي: مفتاح
+   كوكل محصور بالماستر وحده، ولا يصل أي مفتاح إلى لوحة الزبون. */
 function openCapMap(oid) {
   capOrderId = oid; capFitted = false;
   showOnly('mapView');
@@ -1012,11 +1049,29 @@ async function pollCaptain() {
           capLine = L.polyline(seg, { color: '#f97316', weight: 4, opacity: .95 }).addTo(capMap);
         }
       }
-      info.innerHTML = 'الكابتن: <b>' + esc(r.driverName || '') + '</b>' + (r.lastUpdate ? ' — آخر تحديث ' + esc(capAgo(r.lastUpdate)) : '');
+      let tail = r.lastUpdate ? ' — آخر تحديث ' + esc(capAgo(r.lastUpdate)) : '';
+      /* وقت الوصول التقريبي يُحسب بعد استلام الكابتن للطلب وهو بطريقه
+         للزبون؛ قبل الاستلام تُعرض المسافة فقط. */
+      if (r.custLat && r.custLng) {
+        const eta = capEta(r.lat, r.lng, r.custLat, r.custLng);
+        if (r.status === 'picked_up' || r.status === 'in_transit') {
+          tail += ' — الوصول إليك تقريباً: <b>~' + eta.mins + ' دقيقة</b> (مسافة ~' + eta.km.toFixed(1) + ' كم)';
+        } else {
+          tail += ' — المسافة إليك ~' + eta.km.toFixed(1) + ' كم';
+        }
+      }
+      info.innerHTML = 'الكابتن: <b>' + esc(r.driverName || '') + '</b>' + tail;
     } else {
       info.textContent = 'الكابتن: ' + (r.driverName || '') + ' — موقعه غير متاح هذه اللحظة';
     }
-    if (pts.length && !capFitted) { capFitted = true; capMap.fitBounds(pts, { padding: [30, 30] }); }
+    /* الإطار يبقى متوسّطاً بين النقاط عند كل نبضة: الخريطة بطاقة
+       مسار متوسطة الحجم، لا خريطة كبيرة ثابتة الإطار. */
+    if (pts.length >= 2) {
+      capMap.fitBounds(pts, { padding: [40, 40] });
+    } else if (pts.length === 1 && !capFitted) {
+      capFitted = true;
+      capMap.setView(pts[0], 14);
+    }
   } catch (e) {}
 }
 
