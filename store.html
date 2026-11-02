@@ -229,6 +229,12 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
 .ordrow{ display:flex; justify-content:space-between; font-size:.8rem; padding:2px 0; color:var(--mut); }
 .ordrow.disc{ color:#4ade80; }
 .ordrow.grand{ border-top:1px solid var(--line); margin-top:5px; padding-top:6px; color:var(--ink); font-weight:900; font-size:.88rem; }
+.ordtabs{ display:flex; gap:6px; background:#292524; border:1px solid var(--line); border-radius:999px; padding:5px; margin-bottom:12px; }
+.ordtabs button{ flex:1; border:0; background:transparent; color:var(--mut); font-family:inherit; font-weight:900; font-size:.88rem; padding:9px 0; border-radius:999px; cursor:pointer; }
+.ordtabs button.on{ background:linear-gradient(135deg,#fbbf24,#f97316); color:#1c1410; }
+.ordempty{ text-align:center; padding:80px 18px 60px; color:var(--mut); }
+.ordempty .big{ font-size:1.02rem; font-weight:900; color:var(--ink); margin-bottom:6px; }
+.ordempty .browse{ margin-top:16px; background:linear-gradient(135deg,#fbbf24,#f97316); color:#1c1410; border:0; border-radius:999px; padding:11px 26px; font-family:inherit; font-weight:900; font-size:.9rem; cursor:pointer; }
 .admct{ margin-top:16px; border-top:1px dashed var(--line); padding-top:12px; text-align:center; }
 .admct .t{ color:var(--mut); font-weight:800; font-size:.82rem; margin-bottom:6px; }
 .admct .n{ display:block; color:#fdba74; font-weight:900; font-size:1.12rem; letter-spacing:.5px; text-decoration:none; direction:ltr; }
@@ -291,8 +297,11 @@ header{ background:#171412; box-shadow:0 10px 30px rgba(0,0,0,.45); }
   <section id="ordersView" style="display:none">
     <button class="backbtn" id="ordersBack" type="button">→ رجوع</button>
     <div class="sec-title">طلباتي</div>
+    <!-- تبويبا «طلباتي» (طلب علي): نشطة = الجارية وفيها زرّ التتبّع،
+         وسابقة = المكتملة والملغية وحدها بشاشة مستقلة. -->
+    <div class="ordtabs"><button type="button" id="otabA" class="on">نشطة</button><button type="button" id="otabP">سابقة</button></div>
     <!-- بطاقة تتبّع الطلب النشط نُقلت إلى هنا من الرئيسية (طلب علي):
-         تظهر أعلى «طلباتي» فوق قائمة الطلبات، والرئيسية بلا بطاقة طلب. -->
+         تظهر أعلى تبويب «نشطة» فوق قائمتها، والرئيسية بلا بطاقة طلب. -->
     <div id="trackZone"></div>
     <div id="ordersList"></div>
   </section>
@@ -964,6 +973,59 @@ function ordDetails(o) {
   h += '<div class="ordrow grand"><span>الإجمالي</span><span>' + fmt(o.price) + '</span></div>';
   return h;
 }
+let ordCache = [], ordTab = 'A';
+/* نصّ حالة الاستلام للطلب النشط (طلب علي): يبيّن للزبون هل الكابتن
+   استلم طلبه أم لا، من حالة الطلب الحية التي يرسلها الخادم. */
+function ordPickupTxt(o) {
+  const s = String(o.status || '');
+  if (s === 'picked_up' || s === 'in_transit') return ['الكابتن استلم طلبك — وهو في الطريق إليك', '#4ade80'];
+  if (s === 'arrived_at_res') return ['الكابتن وصل للمحل — بانتظار استلام الطلب', '#fbbf24'];
+  if (s === 'accepted') return ['الكابتن قبل الطلب ومتوجه للمحل — لم يستلم الطلب بعد', '#fbbf24'];
+  if (o.hasCaptain) return ['بانتظار قبول الكابتن لطلبك', '#fbbf24'];
+  return ['جارٍ البحث عن كابتن لطلبك…', '#fbbf24'];
+}
+function ordCard(o) {
+  const st = ordStateTxt(o);
+  const dt = o.ts ? new Date(o.ts).toLocaleString('ar') : '';
+  let btn = '';
+  if (o.state === 'active' && o.hasCaptain) btn = '<button class="ordtrack" type="button" data-track="' + esc(o.id) + '">تتبّع الكابتن على الخريطة</button>';
+  else if (o.state === 'active') btn = '<div class="ordmeta" style="margin-top:8px">جارٍ تعيين الكابتن…</div>';
+  const det = ordDetails(o);
+  const open = o.state === 'active';
+  const detHtml = det ? '<button class="ordtgl" type="button" data-tgl>تفاصيل الطلب ' + (open ? '▴' : '▾') + '</button><div class="orddet" data-det' + (open ? '' : ' style="display:none"') + '>' + det + '</div>' : '';
+  let pk = '';
+  if (o.state === 'active') { const p = ordPickupTxt(o); pk = '<div class="ordmeta" style="margin-top:6px">حالة الاستلام: <b style="color:' + p[1] + '">' + p[0] + '</b></div>'; }
+  return '<div class="ordcard"><div class="ordtop"><b>' + esc(o.shopName) + '</b><span class="ordchip ' + st[1] + '">' + st[0] + '</span></div>' +
+    '<div class="ordmeta">' + esc(dt) + (o.area ? ' • ' + esc(o.area) : '') + '</div>' +
+    '<div class="ordmeta">الإجمالي: <b>' + fmt(o.price) + '</b>' + (o.driverName ? ' • الكابتن: ' + esc(o.driverName) : '') + '</div>' + pk + detHtml + btn + '</div>';
+}
+function renderOrdTab(t) {
+  ordTab = t;
+  const bA = $('#otabA'), bP = $('#otabP');
+  if (bA) bA.classList.toggle('on', t === 'A');
+  if (bP) bP.classList.toggle('on', t === 'P');
+  const tz = $('#trackZone'); if (tz) tz.style.display = (t === 'A') ? '' : 'none';
+  const box = $('#ordersList'); if (!box) return;
+  const list = ordCache.filter(o => t === 'A' ? o.state === 'active' : o.state !== 'active');
+  if (!list.length) {
+    box.innerHTML = t === 'A'
+      ? '<div class="ordempty"><div class="big">لا توجد طلبات نشطة</div><div>طلبك الجاري يظهر هنا مع حالته أولاً بأول</div><button class="browse" type="button" id="ordBrowse">تصفح المطاعم</button></div>'
+      : '<div class="ordempty"><div class="big">لا توجد طلبات سابقة</div><div>طلباتك المكتملة والملغية تظهر هنا</div></div>';
+    const bb = $('#ordBrowse');
+    /* زر «تصفح المطاعم» يعيد للواجهة الرئيسية دائماً (طلب علي) —
+       نضغط زرّ التنقّل «الرئيسية» نفسه فتتحدث الإضاءة والعرض معاً. */
+    if (bb) bb.addEventListener('click', () => { const h = document.querySelector('[data-nav="home"]'); if (h) h.click(); });
+    return;
+  }
+  box.innerHTML = list.map(ordCard).join('');
+  box.querySelectorAll('[data-track]').forEach(b => b.addEventListener('click', () => openCapMap(b.dataset.track)));
+  box.querySelectorAll('[data-tgl]').forEach(b => b.addEventListener('click', () => {
+    const d = b.parentElement.querySelector('[data-det]'); if (!d) return;
+    const show = d.style.display === 'none';
+    d.style.display = show ? '' : 'none';
+    b.textContent = 'تفاصيل الطلب ' + (show ? '▴' : '▾');
+  }));
+}
 async function openOrders() {
   if (!identity.session) { toast('سجّل دخولك لعرض طلباتك'); openAuth(); return; }
   ordReturn = curShop ? 'shopView' : 'shopsView';
@@ -974,30 +1036,13 @@ async function openOrders() {
   try {
     const r = await gsCall({ action: 'CUSTOMER_ORDERS', identity: { phone: identity.phone, session: identity.session } });
     if (!r.success) { box.innerHTML = '<div class="empty">' + esc(r.msg || 'تعذّر جلب طلباتك') + '</div>'; return; }
-    const list = r.orders || [];
-    if (!list.length) { box.innerHTML = '<div class="empty">لا توجد طلبات بعد — اطلب من أي محل وستظهر طلباتك هنا</div>'; return; }
-    box.innerHTML = list.map(o => {
-      const st = ordStateTxt(o);
-      const dt = o.ts ? new Date(o.ts).toLocaleString('ar') : '';
-      let btn = '';
-      if (o.state === 'active' && o.hasCaptain) btn = '<button class="ordtrack" type="button" data-track="' + esc(o.id) + '">تتبّع الكابتن على الخريطة</button>';
-      else if (o.state === 'active') btn = '<div class="ordmeta" style="margin-top:8px">جارٍ تعيين الكابتن…</div>';
-      const det = ordDetails(o);
-      const open = o.state === 'active';
-      const detHtml = det ? '<button class="ordtgl" type="button" data-tgl>تفاصيل الطلب ' + (open ? '▴' : '▾') + '</button><div class="orddet" data-det' + (open ? '' : ' style="display:none"') + '>' + det + '</div>' : '';
-      return '<div class="ordcard"><div class="ordtop"><b>' + esc(o.shopName) + '</b><span class="ordchip ' + st[1] + '">' + st[0] + '</span></div>' +
-        '<div class="ordmeta">' + esc(dt) + (o.area ? ' • ' + esc(o.area) : '') + '</div>' +
-        '<div class="ordmeta">الإجمالي: <b>' + fmt(o.price) + '</b>' + (o.driverName ? ' • الكابتن: ' + esc(o.driverName) : '') + '</div>' + detHtml + btn + '</div>';
-    }).join('');
-    box.querySelectorAll('[data-track]').forEach(b => b.addEventListener('click', () => openCapMap(b.dataset.track)));
-    box.querySelectorAll('[data-tgl]').forEach(b => b.addEventListener('click', () => {
-      const d = b.parentElement.querySelector('[data-det]'); if (!d) return;
-      const show = d.style.display === 'none';
-      d.style.display = show ? '' : 'none';
-      b.textContent = 'تفاصيل الطلب ' + (show ? '▴' : '▾');
-    }));
+    ordCache = r.orders || [];
+    if (!ordCache.length) { box.innerHTML = '<div class="empty">لا توجد طلبات بعد — اطلب من أي محل وستظهر طلباتك هنا</div>'; return; }
+    renderOrdTab(ordCache.some(o => o.state === 'active') ? 'A' : 'P');
   } catch (e) { box.innerHTML = '<div class="empty">خطأ بالاتصال — حاول مجدداً</div>'; }
 }
+$('#otabA').addEventListener('click', () => renderOrdTab('A'));
+$('#otabP').addEventListener('click', () => renderOrdTab('P'));
 $('#ordersBack').addEventListener('click', () => showOnly(ordReturn));
 $('#mapBack').addEventListener('click', () => showOnly('ordersView'));
 /* مسافة ووقت وصول تقريبيان بين نقطتين: خط مستقيم × ١٫٣ (التفاف
