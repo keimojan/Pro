@@ -409,6 +409,7 @@ const K_ID = 'pro_cust_id_v2', K_ORD = 'pro_cust_orders_v2', K_CART = 'pro_cust_
 let identity = loadJ(K_ID, null);                 // {name, phone, verified, session}
 if (identity) { identity.verified = !!identity.verified; identity.session = identity.session || ''; }
 let shops = [], curShop = null, curProducts = {};
+let shopsLoading = true; // قائمة المحلات ما اكتمل تحميلها بعد — لا تُعرض رسالة «لا توجد» قبل اكتماله
 let shopSearchTxt = '';
 let promos = [];
 let cart = loadJ(K_CART, { shopPhone: '', items: {} });  // items: {pid:{q,price,name}}
@@ -501,6 +502,7 @@ function minFeeOf(s) { return (s.areas && s.areas.length) ? Math.min.apply(null,
 async function loadShops() {
   try { const d = await gsCall({ action: 'LIST_STORES' }); if (d.success && Array.isArray(d.shops)) { shops = d.shops; promos = Array.isArray(d.promos) ? d.promos : []; } } catch (e) {}
   window.__featPhone = null; let __mx = 0; shops.forEach(x => { const o = Number(x.orders) || 0; if (o > __mx) { __mx = o; window.__featPhone = x.phone; } });
+  shopsLoading = false;
   renderPromoCard();
   renderShops();
 }
@@ -545,7 +547,10 @@ function renderPromoCard() {
 function renderShops() {
   syncAd();
   const el = $('#shopsList');
-  if (!shops.length) { el.innerHTML = '<div class="empty">لا توجد مطاعم متاحة حالياً.<br>تأكد من اتصالك وحاول بعد قليل.</div>'; return; }
+  if (!shops.length) {
+    if (shopsLoading) { el.innerHTML = '<div class="sk-wrap"><div class="sk-card"><div class="skl sk-img"></div><div class="skl sk-line"></div><div class="skl sk-line short"></div></div><div class="sk-card"><div class="skl sk-img"></div><div class="skl sk-line"></div><div class="skl sk-line short"></div></div></div><div class="empty" style="margin-top:2px">جارٍ تحميل المحلات…</div>'; return; }
+    el.innerHTML = '<div class="empty">لا توجد مطاعم متاحة حالياً.<br>تأكد من اتصالك وحاول بعد قليل.</div>'; return;
+  }
   const list = shops.slice();
   if (myLoc) { list.forEach(s => s.__d = distKm(myLoc.lat, myLoc.lng, s.lat, s.lng)); list.sort((a, b) => (a.__d == null ? 1e9 : a.__d) - (b.__d == null ? 1e9 : b.__d)); }
   shops.forEach(x => { x.__cat = x.cat || inferCat(x.name); });
