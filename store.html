@@ -92,7 +92,6 @@
   .sumrow.tot{ font-size:1.02rem; font-weight:900; border-top:2px solid var(--line); margin-top:6px; padding-top:10px; }
   .submit{ width:100%; background:var(--or); color:#fff; border:none; font-family:inherit; font-weight:900; font-size:1rem; border-radius:14px; padding:14px; cursor:pointer; margin-top:12px; }
   .submit:disabled{ background:#d6d3d1; cursor:not-allowed; }
-  .pinbox{ background:#fff7ed; border:1px dashed #fdba74; border-radius:12px; padding:10px 12px; font-size:.8rem; font-weight:800; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
   .track{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:14px; margin-bottom:12px; }
   .steps{ display:flex; align-items:flex-start; margin:14px 0 6px; }
   .step{ flex:1; text-align:center; position:relative; }
@@ -339,13 +338,8 @@ html, body{ overscroll-behavior:none; }
     <div id="cartRows"></div>
     <label class="lb">منطقة التوصيل</label>
     <select class="fld" id="coArea"></select>
-    <label class="lb">اسمك</label>
-    <input class="fld" id="coName" type="text" autocomplete="name" placeholder="الاسم">
-    <label class="lb">رقم هاتفك</label>
-    <input class="fld" id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07xxxxxxxxx">
     <label class="lb">العنوان / أقرب نقطة دالة (اختياري)</label>
     <input class="fld" id="coAddr" type="text" placeholder="مثال: قرب السوق الكبير">
-    <div class="pinbox"><span id="pinTxt">📍 عند تأكيد الطلب يُلتقط موقعك الحقيقي الحالي تلقائياً ويُرسل معه — وبلا موقع حقيقي لا يكتمل الطلب</span></div>
     <div class="sumrow"><span>مجموع الأصناف</span><span id="sumItems">٠</span></div>
     <div class="sumrow"><span>أجور التوصيل</span><span id="sumFee">٠</span></div>
     <div class="sumrow" id="sumPromoRow" style="display:none; color:var(--ok)"><span id="sumPromoLbl">خصم عرض</span><span id="sumPromo">٠</span></div>
@@ -723,15 +717,6 @@ function openSheet(retried) {
     : '<option value="">— لا مناطق توصيل محددة —</option>';
   if (!areas.find(a => a.name === selArea)) selArea = areas.length ? areas[0].name : '';
   $('#coArea').value = selArea;
-  if (typeof loggedIn === 'function' && loggedIn()) {
-    /* مسجل دخولاً: الاسم والرقم من الحساب نفسه، مقفلان هنا —
-       والخادم يعتمد اسم الحساب ويربط الطلب بجلسته حصراً. */
-    $('#coName').value = identity.name || ''; $('#coPhone').value = identity.phone || '';
-    $('#coName').readOnly = true; $('#coPhone').readOnly = true;
-  } else {
-    $('#coName').readOnly = false; $('#coPhone').readOnly = false;
-    if (identity) { if (!$('#coName').value) $('#coName').value = identity.name || ''; if (!$('#coPhone').value) $('#coPhone').value = identity.phone || ''; }
-  }
   updSums();
   $('#cartSheet').classList.add('show');
 }
@@ -762,18 +747,19 @@ $('#submitBtn').addEventListener('click', async () => {
   if (!cartCount()) return toast('السلة فارغة');
   if (!loggedIn()) { $('#cartSheet').classList.remove('show'); openAuth(); return toast('سجّل دخولك أولاً لإتمام الطلب'); }
   if (shopClosed(s)) { renderClosedBanner(); return toast(s.name + ' ' + (femName(s.name) ? 'مغلقة' : 'مغلق') + ' حالياً — لا يمكن إتمام الطلب'); }
-  const name = $('#coName').value.trim();
-  const phoneDigits = $('#coPhone').value.replace(/\D/g, '');
-  if (name.length < 2) return toast('اكتب اسمك');
-  if (!/^(07\d{9}|7\d{9})$/.test(phoneDigits)) return toast('اكتب رقم هاتف صحيح يبدأ بـ 07');
+  /* الاسم والرقم من بيانات تسجيل الدخول حصراً (طلب علي) — لا خانات
+     بالورقة، والخادم يعتمد اسم الحساب ويربط الطلب بجلسته. */
+  const name = String((identity && identity.name) || '').trim();
+  const phoneDigits = String((identity && identity.phone) || '').replace(/\D/g, '');
+  if (name.length < 2) return toast('بيانات حسابك غير مكتملة — تواصل مع الإدارة');
+  if (!/^(07\d{9}|7\d{9})$/.test(phoneDigits)) return toast('رقم هاتف حسابك غير صحيح — تواصل مع الإدارة');
   if (!selArea) return toast('هذا المطعم لم يحدد مناطق توصيله بعد');
   const btn = $('#submitBtn'); btn.disabled = true; btn.textContent = 'جارٍ إرسال الطلب…';
   try {
     pin = await freshPin();   // دبوس طازج عند كل إتمام — لا طلب بدون موقع حقيقي
   } catch (e) {
     btn.disabled = false; btn.textContent = 'تأكيد الطلب';
-    $('#pinTxt').textContent = 'تعذّر تحديد الموقع — فعّل GPS وحاول مجدداً';
-    return toast('لا يمكن إتمام الطلب بدون موقعك الحقيقي');
+    return toast('لا يمكن إتمام الطلب بدون موقعك الحقيقي — فعّل GPS وحاول مجدداً');
   }
   try {
     const items = Object.keys(cart.items).map(id => ({ id: id, qty: cart.items[id].q }));
