@@ -654,19 +654,22 @@ function renderProducts() {
   if (!allIds.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1">لا منتجات مضافة بعد عند هذا المطعم.</div>'; return; }
   const ids = shopSearchTxt ? allIds.filter(id => String((curProducts[id] || {}).name || '').includes(shopSearchTxt)) : allIds;
   if (!ids.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1">لا منتجات مطابقة لـ«' + esc(shopSearchTxt) + '» داخل هذا المحل.</div>'; return; }
+  const shopOff = shopClosed(curShop);
   g.innerHTML = ids.map(id => {
     const p = curProducts[id] || {}; const off = p.available === false;
     const q = cart.shopPhone === curShop.phone && cart.items[id] ? cart.items[id].q : 0;
     const img = p.img ? '<img src="' + esc(p.img) + '" alt="">' : '<div class="ph">' + esc((p.name || '؟').trim().charAt(0)) + '</div>';
-    const ctrl = off ? '<span class="badge-off">غير متاح حالياً</span>'
+    const ctrl = shopOff ? '<span class="badge-off">المحل مغلق حالياً</span>'
+      : off ? '<span class="badge-off">غير متاح حالياً</span>'
       : q > 0 ? '<div class="stepper"><button data-a="dec" data-id="' + id + '">−</button><b>' + q + '</b><button data-a="inc" data-id="' + id + '">+</button></div>'
       : '<button class="addbtn" data-a="inc" data-id="' + id + '">أضف +</button>';
-    return '<div class="prod' + (off ? ' off' : '') + '">' + img + '<div class="pb"><div class="pn">' + esc(p.name || '') + '</div><div class="pp">' + fmt(p.price) + '</div><div class="pa">' + ctrl + '</div></div></div>';
+    return '<div class="prod' + ((off || shopOff) ? ' off' : '') + '">' + img + '<div class="pb"><div class="pn">' + esc(p.name || '') + '</div><div class="pp">' + fmt(p.price) + '</div><div class="pa">' + ctrl + '</div></div></div>';
   }).join('');
   g.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => chQty(b.dataset.id, b.dataset.a === 'inc' ? 1 : -1)));
 }
 function chQty(id, d) {
   if (!curShop) return;
+  if (shopClosed(curShop)) { toast(curShop.name + ' ' + (femName(curShop.name) ? 'مغلقة' : 'مغلق') + ' حالياً — لا يمكن الإضافة إلى السلة'); return; }
   if (cart.shopPhone !== curShop.phone) cart = { shopPhone: curShop.phone, items: {} };
   const p = curProducts[id] || {};
   const cur = cart.items[id] ? cart.items[id].q : 0;
