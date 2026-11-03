@@ -434,10 +434,11 @@ function distKm(a, b, c, d) {
 }
 
 /* ── تصنيف المحلات (خانات السوق) ── */
-const CATS = ['مطاعم', 'مرطبات', 'حلويات', 'خضراوات', 'قطع غيار', 'أخرى'];
+const CATS = ['مطاعم', 'مرطبات', 'حلويات', 'خضراوات', 'قطع غيار', 'إنشائية', 'أخرى'];
 let selCat = 'الكل';
 function inferCat(name) {
   const n = String(name || '');
+  if (/[إا]نشائ|مواد بناء/.test(n)) return 'إنشائية';
   if (/قطع غيار|قطع الغيار/.test(n)) return 'قطع غيار';
   if (/خضراوات|خضار|مخضر|فواكه/.test(n)) return 'خضراوات';
   if (/حلويات/.test(n)) return 'حلويات';
@@ -452,11 +453,12 @@ const CATIMG = {
   'حلويات': 'https://images.unsplash.com/photo-1551024506-0bccd828d307?q=80&w=200&auto=format&fit=crop',
   'خضراوات': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?q=80&w=200&auto=format&fit=crop',
   'قطع غيار': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?q=80&w=200&auto=format&fit=crop',
+  'إنشائية': 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=200&auto=format&fit=crop',
   'أخرى': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=200&auto=format&fit=crop'
 };
 let searchTxt = '';
 function renderCatChips() {
-  const present = CATS.filter(c => shops.some(x => x.__cat === c));
+  const present = CATS.filter(c => shops.some(x => (x.__cats || [x.__cat]).includes(c)));
   if (selCat !== 'الكل' && !present.includes(selCat)) selCat = 'الكل';
   const box = $('#catChips'); if (!box) return;
   box.innerHTML = ['الكل'].concat(present).map(c =>
@@ -553,9 +555,9 @@ function renderShops() {
   }
   const list = shops.slice();
   if (myLoc) { list.forEach(s => s.__d = distKm(myLoc.lat, myLoc.lng, s.lat, s.lng)); list.sort((a, b) => (a.__d == null ? 1e9 : a.__d) - (b.__d == null ? 1e9 : b.__d)); }
-  shops.forEach(x => { x.__cat = x.cat || inferCat(x.name); });
+  shops.forEach(x => { const c0 = x.cat || inferCat(x.name); x.__cat = c0; x.__cats = (c0 === 'إنشائية') ? ['إنشائية', 'قطع غيار'] : [c0]; });
   renderCatChips();
-  let shown = (selCat === 'الكل') ? list : list.filter(x => x.__cat === selCat);
+  let shown = (selCat === 'الكل') ? list : list.filter(x => (x.__cats || [x.__cat]).includes(selCat));
   if (searchTxt) shown = shown.filter(x => String(x.name || '').includes(searchTxt));
   if (!shown.length) { el.innerHTML = '<div class="empty">' + (searchTxt ? 'لا نتائج لـ«' + esc(searchTxt) + '».' : 'لا محلات في خانة «' + esc(selCat) + '» حالياً.') + '</div>'; return; }
   if (window.__featPhone) { const fi = shown.findIndex(x => x.phone === window.__featPhone); if (fi > 0) { const f0 = shown.splice(fi, 1)[0]; shown.unshift(f0); } }
