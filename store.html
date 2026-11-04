@@ -434,11 +434,12 @@ function distKm(a, b, c, d) {
 }
 
 /* ── تصنيف المحلات (خانات السوق) ── */
-const CATS = ['مطاعم', 'مرطبات', 'حلويات', 'خضراوات', 'قطع غيار', 'إنشائية', 'أخرى'];
+const CATS = ['مطاعم', 'مرطبات', 'حلويات', 'خضراوات', 'قطع غيار', 'إنشائية', 'مواد منزلية', 'أخرى'];
 let selCat = 'الكل';
 function inferCat(name) {
   const n = String(name || '');
   if (/[إا]نشائ|مواد بناء/.test(n)) return 'إنشائية';
+  if (/منزلي|منظفات/.test(n)) return 'مواد منزلية';
   if (/قطع غيار|قطع الغيار/.test(n)) return 'قطع غيار';
   if (/خضراوات|خضار|مخضر|فواكه/.test(n)) return 'خضراوات';
   if (/حلويات/.test(n)) return 'حلويات';
@@ -454,6 +455,7 @@ const CATIMG = {
   'خضراوات': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?q=80&w=200&auto=format&fit=crop',
   'قطع غيار': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?q=80&w=200&auto=format&fit=crop',
   'إنشائية': 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=200&auto=format&fit=crop',
+  'مواد منزلية': 'https://images.unsplash.com/photo-1563453392212-326f5e854473?q=80&w=200&auto=format&fit=crop',
   'أخرى': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=200&auto=format&fit=crop'
 };
 let searchTxt = '';
