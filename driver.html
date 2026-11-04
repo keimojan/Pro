@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.11-Items";
+  const CURRENT_APP_VERSION = "16.12-ItemsPro";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -2727,7 +2727,7 @@ function listenOrders(){
                   : st==='arrived_at_res' ? 'arrived' : 'heading';
         const srvMs = f.last_update ? new Date(f.last_update).getTime() : Date.now();
         active.push({id:oid,resName:f.restaurant||'',resArea:f.resArea||null,
-          details:String(f.details||''),items:Array.isArray(f.items)?f.items:null,itemsTotal:parseFloat(f.items_total)||0,price:parseFloat(f.price)||0,area:f.area||'غير محدد',
+          details:String(f.details||''),items:Array.isArray(f.items)?f.items:null,itemsTotal:parseFloat(f.items_total)||0,feeFull:parseFloat(f.fee_full)||0,promoDisc:parseFloat(f.promo_discount)||0,promoTitle:f.promo_title||'',price:parseFloat(f.price)||0,area:f.area||'غير محدد',
           state:st2,photoUrl:f.photoUrl||'',resPhone:f.resPhone||'غير متوفر',
           resLat:f.resLat,resLng:f.resLng,custLat:f.custLat||null,custLng:f.custLng||null,comm:f.comm||0,payType:f.payType||'المطعم يدفع',
           acceptedTime:srvMs,
@@ -2763,7 +2763,7 @@ function listenOrders(){
         if(!mine)return;
         if(active.find(o=>String(o.id)===String(f.id))){if(!f.is_sovereign){guaranteeAccept(f.id);stopAlarm();return;}}
         if(curOrder&&String(curOrder.id)===String(f.id))return;
-        curOrder={id:f.id,resName:f.restaurant,area:f.area||'غير محدد',price:f.price||0,details:f.details||'',items:Array.isArray(f.items)?f.items:null,itemsTotal:parseFloat(f.items_total)||0,
+        curOrder={id:f.id,resName:f.restaurant,area:f.area||'غير محدد',price:f.price||0,details:f.details||'',items:Array.isArray(f.items)?f.items:null,itemsTotal:parseFloat(f.items_total)||0,feeFull:parseFloat(f.fee_full)||0,promoDisc:parseFloat(f.promo_discount)||0,promoTitle:f.promo_title||'',
           photoUrl:f.photoUrl||'',resLat:f.resLat,resLng:f.resLng,custLat:f.custLat||null,custLng:f.custLng||null,resPhone:f.resPhone,resArea:f.resArea||null,
           comm:f.comm||0,payType:f.payType||'المطعم يدفع',is_sovereign:f.is_sovereign||false};
         const age=f.last_update?Math.max(0,Date.now()-new Date(f.last_update).getTime()):0;
@@ -2867,7 +2867,7 @@ window.acceptOrder=async function(){
 };
 function finalizeAccept(){
   document.getElementById('alertOv').classList.add('dn');
-  const o={id:curOrder.id,resName:curOrder.resName,resArea:curOrder.resArea||null,details:String(curOrder.details),items:Array.isArray(curOrder.items)?curOrder.items:null,itemsTotal:parseFloat(curOrder.itemsTotal)||0,
+  const o={id:curOrder.id,resName:curOrder.resName,resArea:curOrder.resArea||null,details:String(curOrder.details),items:Array.isArray(curOrder.items)?curOrder.items:null,itemsTotal:parseFloat(curOrder.itemsTotal)||0,feeFull:parseFloat(curOrder.feeFull)||0,promoDisc:parseFloat(curOrder.promoDisc)||0,promoTitle:curOrder.promoTitle||'',
     price:parseFloat(curOrder.price)||0,area:curOrder.area,state:'heading',photoUrl:curOrder.photoUrl,
     resPhone:curOrder.resPhone,resLat:curOrder.resLat,resLng:curOrder.resLng,custLat:curOrder.custLat||null,custLng:curOrder.custLng||null,
     comm:curOrder.comm||0,payType:curOrder.payType||'المطعم يدفع',
@@ -3019,15 +3019,29 @@ const ICO={
    للمطابقة عند الاستلام — بلا أي تغيير بالخادم. طلب بلا items (مطعم
    عادي) لا يرسم شيئاً. */
 function itemsBox(o){
-  const it=(o&&Array.isArray(o.items))?o.items:null;
+  let it=(o&&Array.isArray(o.items))?o.items:null;
+  if(!it&&o&&o.items&&typeof o.items==='object'){
+    /* قاعدة البيانات قد تعيد المصفوفة كائناً بمفاتيح رقمية — تُطبَّع
+       مصفوفةً مرتبة كي لا يختفي الصندوق صامتاً على أي جهاز. */
+    it=Object.keys(o.items).filter(k=>/^\d+$/.test(k)).sort((a,b)=>Number(a)-Number(b)).map(k=>o.items[k]);
+  }
   if(!it||!it.length)return '';
   let rows='',sum=0;
   it.forEach(x=>{
     const q=Number(x&&x.qty)||0, p=Number(x&&x.price)||0, lt=q*p; sum+=lt;
-    rows+=`<div class="it-r"><span class="it-n">${esc((x&&x.name)||'')}</span><span class="it-q">×${q}</span><span class="it-p">${num(lt).toLocaleString('ar-EG')} د.ع</span></div>`;
+    rows+=`<div class="it-r"><span class="it-n">${esc((x&&x.name)||'')}</span><span class="it-q">×${q}${q>1&&p?` <small>(${num(p).toLocaleString('ar-EG')})</small>`:''}</span><span class="it-p">${num(lt).toLocaleString('ar-EG')} د.ع</span></div>`;
   });
   const tot=Number(o.itemsTotal)>0?Number(o.itemsTotal):sum;
-  return `<div class="it-box"><div class="it-h">🧾 أصناف الطلب — للمطابقة عند الاستلام</div>${rows}<div class="it-r it-t"><span class="it-n">مجموع الأصناف</span><span class="it-p">${num(tot).toLocaleString('ar-EG')} د.ع</span></div></div>`;
+  const grand=Number(o.price)||0;
+  const feeFull=Number(o.feeFull)>0?Number(o.feeFull):(grand>tot?grand-tot:0);
+  const disc=Number(o.promoDisc)>0?Number(o.promoDisc):0;
+  let totals=`<div class="it-r it-t"><span class="it-n">💰 يدفعه الكابتن عند المتجر</span><span class="it-p">${num(tot).toLocaleString('ar-EG')} د.ع</span></div>`;
+  if(grand>0){
+    if(feeFull>0)totals+=`<div class="it-r"><span class="it-n">🛵 أجور التوصيل</span><span class="it-p">${num(feeFull).toLocaleString('ar-EG')} د.ع</span></div>`;
+    if(disc>0)totals+=`<div class="it-r"><span class="it-n">🎁 خصم عرض${o.promoTitle?` «${esc(String(o.promoTitle))}»`:''} — يتحمّله الماستر</span><span class="it-p">−${num(disc).toLocaleString('ar-EG')} د.ع</span></div>`;
+    totals+=`<div class="it-r it-t"><span class="it-n">المجموع الكلي مع التوصيل</span><span class="it-p">${num(grand).toLocaleString('ar-EG')} د.ع</span></div>`;
+  }
+  return `<div class="it-box"><div class="it-h">🧾 أصناف الطلب — للمطابقة عند الاستلام</div>${rows}${totals}</div>`;
 }
 function renderOrders(){
   const box=document.getElementById('orderBox'), rad=document.getElementById('radar');
