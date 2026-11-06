@@ -266,23 +266,21 @@ html, body{ overscroll-behavior:none; }
 (function(){var ua=navigator.userAgent||'';if(/Android/.test(ua)&&/; wv\)/.test(ua)){var b=document.getElementById('updBar');if(b)b.style.display='flex';}})();
 function updNow(){
   if(window._updBusy)return;window._updBusy=true;
+  var apk='https://keimojan.github.io/Pro/pro-store.apk';
   var steps=[
-    'googlechrome://navigate?url='+encodeURIComponent('https://keimojan.github.io/Pro/pro-store.apk'),
-    'intent://keimojan.github.io/Pro/pro-store.apk#Intent;scheme=https;action=android.intent.action.VIEW;S.browser_fallback_url=https%3A%2F%2Fkeimojan.github.io%2FPro%2Fpro-store.apk;end'
+    'googlechrome://navigate?url='+encodeURIComponent(apk),
+    'googlechrome://keimojan.github.io/Pro/pro-store.apk',
+    'intent://keimojan.github.io/Pro/pro-store.apk#Intent;scheme=https;action=android.intent.action.VIEW;end'
   ];
   var i=0;
   function tryNext(){
     if(document.hidden)return;
-    if(i>=steps.length){updNoLink();return;}
+    if(i>=steps.length){window._updBusy=false;return;}
     var u=steps[i++];
     try{location.href=u;}catch(e){}
-    setTimeout(tryNext,950);
+    setTimeout(tryNext,2800);
   }
   tryNext();
-}
-function updNoLink(){
-  var b=document.getElementById('updBar');if(!b)return;
-  b.innerHTML='<div style="flex:1;min-width:0"><div style="font-weight:900;font-size:15px">افتح متصفح كروم وحمّل التطبيق الجديد</div><div style="font-size:12px;opacity:.94;margin-top:2px">من نفس رابط التحميل اللي وصلك على واتساب — أو أعد فتح التطبيق واختار «تحديث الآن» من النافذة</div></div>';
 }
 </script>
 
