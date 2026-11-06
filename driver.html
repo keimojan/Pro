@@ -49,7 +49,7 @@
      الآن: رقمٌ واحد يُشتقّ منه كل شيء — الشاشة والإعدادات ومسح الكاش.
      **وأي تسليم جديد يجب أن يرفعه، وإلا لم يصل.**
      ═══════════════════════════════════════════════════════════════════════ */
-  const CURRENT_APP_VERSION = "16.12-ItemsPro";
+  const CURRENT_APP_VERSION = "16.13-UpdateBar";
   window.APP_VERSION = CURRENT_APP_VERSION;
   /* اطبعه في شاشة الدخول فور جهوز الصفحة — نصّاً واحداً لا نسختين. */
   document.addEventListener('DOMContentLoaded', function(){
@@ -698,6 +698,21 @@ window.__SND={alert:"UklGRvaoAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YdKoAAA
 
 <!-- ══════════════ اللوحة ══════════════ -->
 <div id="dash" class="dn">
+  <div id="updBar" style="margin:10px 12px 0;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#9A3412,#EA580C 55%,#F97316);color:#fff;display:flex;align-items:center;gap:12px;box-shadow:0 6px 18px rgba(234,88,12,.35)">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:900;font-size:16px;line-height:1.25">تطبيق PRO الجديد نزل</div>
+      <div style="font-size:12px;opacity:.94;margin-top:2px">نسخة أسرع وأخف — التحديث فوق نسختك ودخولك يبقى كما هو</div>
+    </div>
+    <button type="button" onclick="updNow()" style="flex-shrink:0;background:#fff;color:#C2410C;border:none;border-radius:11px;padding:11px 18px;font-family:inherit;font-size:15px;font-weight:900;cursor:pointer">حدّث الآن</button>
+  </div>
+  <script>
+  function updNow(){
+    var u='https://keimojan.github.io/Pro/pro-driver.apk';
+    try{ if(window.AndroidRadar&&AndroidRadar.openExternalApp){ AndroidRadar.openExternalApp(u); return; } }catch(e){}
+    try{ var w=window.open(u,'_blank'); if(w){ return; } }catch(e){}
+    alert('تعذّر فتح رابط التحديث — الرابط موجود بمجموعة الكباتن');
+  }
+  </script>
   <div class="hero">
     <div class="hero-top">
       <div class="hero-id">
