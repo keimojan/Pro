@@ -268,19 +268,23 @@ function updNow(){
   if(window._updBusy)return;window._updBusy=true;
   var apk='https://keimojan.github.io/Pro/pro-store.apk';
   var steps=[
-    'HTTPS://keimojan.github.io/Pro/pro-store.apk',
     'googlechrome://navigate?url='+encodeURIComponent(apk),
-    'intent://keimojan.github.io/Pro/pro-store.apk#Intent;scheme=https;action=android.intent.action.VIEW;end'
+    'HTTPS://keimojan.github.io/Pro/pro-store.apk'
   ];
   var i=0;
   function tryNext(){
     if(document.hidden)return;
-    if(i>=steps.length){window._updBusy=false;return;}
+    if(i>=steps.length){updGuide();window._updBusy=false;return;}
     var u=steps[i++];
     try{location.href=u;}catch(e){}
     setTimeout(tryNext,2800);
   }
   tryNext();
+}
+function updGuide(){
+  var b=document.getElementById('updBar');
+  if(!b)return;
+  b.innerHTML='<div style="flex:1;min-width:0"><div style="font-weight:900;font-size:15px">خطوة وحدة ويوصلك التحديث</div><div style="font-size:12.5px;opacity:.95;margin-top:2px;line-height:1.7">أغلق التطبيق من قائمة التطبيقات الأخيرة (اسحبه بعيداً)، ثم افتحه من جديد — تظهر لك نافذة «تحديث جديد متوفر»، اضغط «تحديث الآن» وينزّل التطبيق الحديث</div></div>';
 }
 </script>
 
