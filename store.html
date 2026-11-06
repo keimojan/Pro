@@ -268,8 +268,8 @@ function updNow(){
   if(window._updBusy)return;window._updBusy=true;
   var apk='https://keimojan.github.io/Pro/pro-store.apk';
   var steps=[
+    'HTTPS://keimojan.github.io/Pro/pro-store.apk',
     'googlechrome://navigate?url='+encodeURIComponent(apk),
-    'googlechrome://keimojan.github.io/Pro/pro-store.apk',
     'intent://keimojan.github.io/Pro/pro-store.apk#Intent;scheme=https;action=android.intent.action.VIEW;end'
   ];
   var i=0;
