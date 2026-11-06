@@ -265,18 +265,24 @@ html, body{ overscroll-behavior:none; }
 <script>
 (function(){var ua=navigator.userAgent||'';if(/Android/.test(ua)&&/; wv\)/.test(ua)){var b=document.getElementById('updBar');if(b)b.style.display='flex';}})();
 function updNow(){
-  var done=false;
-  function onVis(){if(document.hidden){done=true;document.removeEventListener('visibilitychange',onVis);}}
-  document.addEventListener('visibilitychange',onVis);
-  location.href='intent://keimojan.github.io/Pro/pro-store.apk#Intent;scheme=https;action=android.intent.action.VIEW;S.browser_fallback_url=https%3A%2F%2Fkeimojan.github.io%2FPro%2Fpro-store.apk;end';
-  setTimeout(function(){
-    document.removeEventListener('visibilitychange',onVis);
-    if(!done&&!document.hidden)updManual();
-  },1100);
+  if(window._updBusy)return;window._updBusy=true;
+  var steps=[
+    'googlechrome://navigate?url='+encodeURIComponent('https://keimojan.github.io/Pro/pro-store.apk'),
+    'intent://keimojan.github.io/Pro/pro-store.apk#Intent;scheme=https;action=android.intent.action.VIEW;S.browser_fallback_url=https%3A%2F%2Fkeimojan.github.io%2FPro%2Fpro-store.apk;end'
+  ];
+  var i=0;
+  function tryNext(){
+    if(document.hidden)return;
+    if(i>=steps.length){updNoLink();return;}
+    var u=steps[i++];
+    try{location.href=u;}catch(e){}
+    setTimeout(tryNext,950);
+  }
+  tryNext();
 }
-function updManual(){
+function updNoLink(){
   var b=document.getElementById('updBar');if(!b)return;
-  b.innerHTML='<div style="flex:1;min-width:0"><div style="font-weight:900;font-size:15px">افتح الرابط بمتصفحك:</div><div style="font-size:12px;opacity:.94;margin:2px 0 6px">اضغط مطولاً على الرابط وانسخه، ثم الصقه في المتصفح (كروم) وثبّت التطبيق</div><input readonly value="https://keimojan.github.io/Pro/pro-store.apk" onclick="this.select()" style="width:100%;box-sizing:border-box;padding:9px 10px;border:none;border-radius:9px;font-size:12.5px;color:#7C2D12;background:#FFF7ED;direction:ltr;text-align:left"></div>';
+  b.innerHTML='<div style="flex:1;min-width:0"><div style="font-weight:900;font-size:15px">افتح متصفح كروم وحمّل التطبيق الجديد</div><div style="font-size:12px;opacity:.94;margin-top:2px">من نفس رابط التحميل اللي وصلك على واتساب — أو أعد فتح التطبيق واختار «تحديث الآن» من النافذة</div></div>';
 }
 </script>
 
