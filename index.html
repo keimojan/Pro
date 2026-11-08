@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102a43">
+  <meta name="description" content="منصة PRO للتوصيل — اختر بوابتك إلى تطبيق السائق أو المتجر أو المطعم.">
+  <title>PRO | منصة التوصيل</title>
+  <link rel="icon" type="image/png" href="pro_logo_192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root{color-scheme:light;--navy:#102a43;--navy2:#173f5f;--ink:#102a43;--muted:#62758a;--line:#e6edf3;--paper:#f5f8fb;--white:#fff;--orange:#f28c28;--blue:#3677d2;--green:#16876d}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:'Tajawal',system-ui,sans-serif;color:var(--ink);background:var(--paper);min-height:100vh}
+    .page{min-height:100vh;overflow:hidden;position:relative;background:radial-gradient(ellipse at 80% -8%,rgba(54,119,210,.12),transparent 34%),radial-gradient(ellipse at 4% 46%,rgba(242,140,40,.09),transparent 28%),var(--paper)}
+    .wrap{width:min(1120px,calc(100% - 40px));margin:auto}.topbar{height:84px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(16,42,67,.08)}
+    .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}.brand img{width:46px;height:46px;object-fit:contain;border-radius:14px}.brand strong{font-size:1.34rem;font-weight:900;letter-spacing:.4px}.brand span{display:block;font-size:.78rem;color:var(--muted);font-weight:600;margin-top:-3px}
+    .region{font-size:.88rem;color:var(--muted);font-weight:700}.region b{color:var(--green);margin-left:6px}
+    .hero{text-align:center;padding:76px 0 42px}.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid #dce7f2;border-radius:999px;background:rgba(255,255,255,.8);padding:7px 14px;color:var(--navy2);font-weight:800;font-size:.86rem}.dot{width:8px;height:8px;background:var(--green);border-radius:50%;box-shadow:0 0 0 4px rgba(22,135,109,.12)}
+    h1{font-size:clamp(2.3rem,6vw,4.25rem);line-height:1.16;letter-spacing:-1.4px;margin:20px 0 14px;font-weight:900}.hero h1 em{font-style:normal;color:var(--blue)}.hero p{max-width:610px;margin:0 auto;color:var(--muted);font-size:1.13rem;line-height:1.9;font-weight:500}
+    .section-label{display:flex;align-items:center;gap:14px;margin:16px 0 20px;color:#7c8fa1;font-size:.8rem;font-weight:800;letter-spacing:.4px}.section-label:before,.section-label:after{content:'';height:1px;background:var(--line);flex:1}
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding-bottom:70px}.card{--accent:var(--blue);--soft:#eaf2ff;position:relative;display:flex;flex-direction:column;min-height:250px;padding:25px 24px 21px;background:var(--white);border:1px solid var(--line);border-radius:22px;text-decoration:none;color:inherit;box-shadow:0 10px 30px rgba(16,42,67,.035);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;overflow:hidden}.card:after{content:'';position:absolute;width:140px;height:140px;border-radius:50%;background:var(--soft);left:-58px;bottom:-76px;transition:transform .2s ease}.card:hover{transform:translateY(-5px);box-shadow:0 18px 40px rgba(16,42,67,.1);border-color:color-mix(in srgb,var(--accent),white 64%)}.card:hover:after{transform:scale(1.25)}.card.store{--accent:var(--orange);--soft:#fff2e5}.card.restaurant{--accent:var(--green);--soft:#e8f6f1}
+    .icon{width:55px;height:55px;display:grid;place-items:center;border-radius:17px;background:var(--soft);color:var(--accent);margin-bottom:22px}.icon svg{width:28px;height:28px}.card h2{font-size:1.37rem;margin:0 0 7px;font-weight:900}.card p{font-size:.95rem;line-height:1.7;color:var(--muted);margin:0 0 20px;max-width:290px}.card-bottom{margin-top:auto;display:flex;align-items:center;justify-content:space-between;color:var(--accent);font-weight:800;font-size:.94rem}.arrow{font-size:1.25rem;transition:transform .2s}.card:hover .arrow{transform:translateX(-4px)}
+    footer{border-top:1px solid var(--line);padding:20px 0 28px;color:#8091a1;font-size:.83rem;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}footer a{color:var(--navy2);text-decoration:none;font-weight:700}footer a:hover{text-decoration:underline}
+    @media(max-width:760px){.topbar{height:72px}.region{font-size:.78rem}.hero{padding:55px 0 34px}.cards{grid-template-columns:1fr;gap:13px;padding-bottom:48px}.card{min-height:205px;padding:21px}.icon{margin-bottom:15px}.wrap{width:min(100% - 30px,540px)}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="wrap topbar">
+      <a class="brand" href="./" aria-label="الصفحة الرئيسية لمنصة PRO">
+        <img src="pro_logo_192.png" alt="شعار PRO" onerror="this.style.display='none'">
+        <div><strong>PRO</strong><span>منصة التوصيل</span></div>
+      </a>
+      <div class="region"><b>●</b> كركوك والزاب</div>
+    </header>
+    <main class="wrap">
+      <section class="hero">
+        <div class="eyebrow"><span class="dot"></span> كل خدمات التوصيل في مكان واحد</div>
+        <h1>أهلًا بك في <em>PRO</em></h1>
+        <p>منصة تربط المطاعم والمتاجر والسائقين لتجعل إدارة الطلبات والتوصيل أسهل وأسرع.</p>
+      </section>
+      <div class="section-label">اختر البوابة المناسبة لك</div>
+      <section class="cards" aria-label="بوابات منصة PRO">
+        <a class="card driver" href="driver.html">
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v11H3zM14 11h4l3 3v4h-7z"/><circle cx="7.5" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M6 11h5M6 14h3"/></svg></span>
+          <h2>تطبيق السائق</h2><p>تابع الطلبات، اقبل التوصيلات، وأنجز رحلاتك بكل سهولة.</p>
+          <span class="card-bottom"><span>الدخول إلى تطبيق السائق</span><span class="arrow" aria-hidden="true">←</span></span>
+        </a>
+        <a class="card store" href="store.html">
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v10h16V10M3 10l2-6h14l2 6"/><path d="M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M9 20v-6h6v6"/></svg></span>
+          <h2>سوق PRO</h2><p>تصفح المتاجر والمنتجات، واكتشف خيارات التسوق والتوصيل.</p>
+          <span class="card-bottom"><span>استكشف سوق PRO</span><span class="arrow" aria-hidden="true">←</span></span>
+        </a>
+        <a class="card restaurant" href="restaurant.html">
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v7a3 3 0 0 0 6 0V3M7 3v18M17 3v18M17 3c3 2 4 5 4 8h-4"/></svg></span>
+          <h2>بوابة المطعم</h2><p>أدر قائمتك واستقبل الطلبات وتابع أعمال مطعمك من مكان واحد.</p>
+          <span class="card-bottom"><span>الدخول إلى بوابة المطعم</span><span class="arrow" aria-hidden="true">←</span></span>
+        </a>
+      </section>
+    </main>
+    <footer class="wrap"><span>© 2026 PRO Delivery System</span><a href="privacy.html">سياسة الخصوصية</a></footer>
+  </div>
+</body>
+</html>
