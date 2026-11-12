@@ -3,7 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>سوق PRO</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="برو PRO">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>برو PRO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -253,6 +258,14 @@ html, body{ overscroll-behavior:none; }
 .shoptile .tm{ padding:0 11px 10px; color:var(--mut); font-size:.7rem; font-weight:700; }
 .shoptile .stchip{ position:absolute; top:8px; inset-inline-start:8px; }
 </style>
+<script>
+/* PRO web self-update: if the server stamp is newer, refresh once to the fresh copy. */
+var PRO_WEB_VER = 1;
+(function(){try{fetch("store-web-version.json?cb="+Date.now(),{cache:"no-store"})
+.then(function(r){return r.json();})
+.then(function(j){if(j&&j.version&&j.version>PRO_WEB_VER&&!sessionStorage.getItem("pro_web_upd")){sessionStorage.setItem("pro_web_upd","1");location.replace("store.html?v="+j.version);}})
+.catch(function(){});}catch(e){}})();
+</script>
 </head>
 <body>
 <div id="updBar" style="display:none;position:relative;z-index:99999;margin:0;padding:12px 14px;background:linear-gradient(135deg,#9A3412,#EA580C 55%,#F97316);color:#fff;align-items:center;gap:12px;box-shadow:0 6px 18px rgba(234,88,12,.35);font-family:inherit">
