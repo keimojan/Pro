@@ -3480,6 +3480,12 @@
     let __prodListenerOn = false;
     let __prodEditingId = null;
     let __prodPhotoData = "";
+    // [STORAGE-ONLY] __prodPhotoFresh: true فقط حين ضُغطت صورة في هذه الجلسة (رفع جديد)،
+    // وfalse حين جاءت الصورة من سجل قائم عند فتح التعديل. __prodLoadedImg/__prodLoadedImgUrl:
+    // حالة صورة السجل الجاري تعديله كما فُتحت — تُحمل كما هي عند حفظ تعديل بلا تغيير للصورة.
+    let __prodPhotoFresh = false;
+    let __prodLoadedImg = "";
+    let __prodLoadedImgUrl = "";
     let __prodCache = {};
     // [STORAGE-STAGE1] رفع صورة مضغوطة (data URL) إلى Firebase Storage وإرجاع رابطها.
     // أي فشل يُرجع "" — الحفظ الحالي (base64 داخل السجل) لا يتعطّل أبداً بسبب التخزين.
@@ -3552,8 +3558,9 @@
         }
         list.innerHTML = ids.map(id => {
             const p = __prodCache[id] || {};
-            const thumb = p.img
-                ? '<img class="prod-thumb" src="' + p.img + '" alt="">'
+            const __thumbSrc = p.img || p.imgUrl || "";
+            const thumb = __thumbSrc
+                ? '<img class="prod-thumb" src="' + __thumbSrc + '" alt="">'
                 : '<div class="prod-thumb prod-thumb-empty"><i data-lucide="image" size="22"></i></div>';
             const avOff = p.available === false;
             return '<div class="prod-row">' + thumb +
@@ -3598,6 +3605,7 @@
             }
             if (bmp && bmp.close) bmp.close();
             __prodPhotoData = dataUrl;
+            __prodPhotoFresh = true;
             const prev = document.getElementById('prodPhotoPreview');
             prev.src = dataUrl; prev.style.display = '';
             nameEl.textContent = file.name + ' — بعد الضغط ~' + Math.round(dataUrl.length * 0.75 / 1024) + 'KB';
@@ -3609,6 +3617,9 @@
     window.resetProductForm = function() {
         __prodEditingId = null;
         __prodPhotoData = "";
+        __prodPhotoFresh = false;
+        __prodLoadedImg = "";
+        __prodLoadedImgUrl = "";
         document.getElementById('prodName').value = "";
         document.getElementById('prodPrice').value = "";
         document.getElementById('prodPhoto').value = "";
@@ -3624,10 +3635,14 @@
         if (!p) return;
         __prodEditingId = id;
         __prodPhotoData = p.img || "";
+        __prodPhotoFresh = false;
+        __prodLoadedImg = p.img || "";
+        __prodLoadedImgUrl = p.imgUrl || "";
         document.getElementById('prodName').value = p.name || "";
         document.getElementById('prodPrice').value = p.price ?? "";
         const prev = document.getElementById('prodPhotoPreview');
-        if (p.img) { prev.src = p.img; prev.style.display = ''; document.getElementById('prodPhotoName').textContent = 'الصورة الحالية'; }
+        const __prevSrc = p.img || p.imgUrl || "";
+        if (__prevSrc) { prev.src = __prevSrc; prev.style.display = ''; document.getElementById('prodPhotoName').textContent = 'الصورة الحالية'; }
         else { prev.style.display = 'none'; document.getElementById('prodPhotoName').textContent = 'لا توجد صورة بعد'; }
         document.getElementById('prodFormTitle').textContent = 'تعديل منتج';
         document.getElementById('prodSaveBtn').textContent = 'حفظ التعديل';
@@ -3644,15 +3659,18 @@
         if (!price || price <= 0) return alert("اكتب سعراً صحيحاً للمنتج.");
         const id = __prodEditingId || ('p' + Date.now().toString(36) + Math.floor(Math.random() * 999));
         const rec = { name, price, img: __prodPhotoData || "", ts: Date.now() };
-        // [STORAGE-STAGE1] كتابة مزدوجة: حقل img يبقى حرفياً كما هو اليوم، ونضيف imgUrl للصور الجديدة فقط.
-        // تعديل منتج بصورة لم تتغيّر ليس رفعاً جديداً: لا نرفع من جديد — نحمل imgUrl القائم فقط
-        // كي لا يمحوه set() الذي يستبدل السجل كاملاً. الصور المحفوظة قديماً تبقى كما هي تماماً.
-        const __prevProd = __prodEditingId ? (__prodCache[__prodEditingId] || {}) : {};
-        if (__prodEditingId && rec.img && rec.img === (__prevProd.img || "")) {
-            if (__prevProd.imgUrl) rec.imgUrl = __prevProd.imgUrl;
-        } else if (rec.img && rec.img.indexOf("data:") === 0) {
+        // [STORAGE-ONLY] صورة جديدة (ضُغطت في هذه الجلسة) تذهب إلى Storage فقط: عند نجاح الرفع
+        // يُكتب img:"" + imgUrl — لا نسخة base64 في السجل. عند فشل الرفع (مقترح مُعلَّم لصاحب
+        // النظام): يبقى rec كما كتبته لوحة ما قبل Storage حرفياً (img = المضغوطة، بلا imgUrl)
+        // كي لا يخسر التاجر الصورة أبداً. تعديل بلا تغيير للصورة ليس رفعاً جديداً: لا رفع —
+        // تُحمل حالة السجل كما فُتحت (قديم يبقى base64، وStorage يبقى imgUrl) كي لا يمحوها
+        // set() الذي يستبدل السجل كاملاً — وهذا يصلح أيضاً حالة img:"" التي كانت ستفقد imgUrl.
+        if (__prodPhotoFresh && rec.img) {
             const __u = await __prodUploadToStorage("products/" + phone + "/" + id + ".jpg", rec.img);
-            if (__u) rec.imgUrl = __u;
+            if (__u) { rec.img = ""; rec.imgUrl = __u; }
+        } else if (__prodEditingId && !__prodPhotoFresh) {
+            rec.img = __prodLoadedImg;
+            if (__prodLoadedImgUrl) rec.imgUrl = __prodLoadedImgUrl;
         }
         try {
             window.showLoading(true);
@@ -3719,7 +3737,7 @@
     };
     /* ── صورة غلاف المحل: حقل مستقل profile.coverImg — لا يمسّ صور المنتجات ── */
     function __renderCover() {
-        const img = String((__shopProfile || {}).coverImg || '');
+        const img = String((__shopProfile || {}).coverImg || (__shopProfile || {}).coverUrl || '');
         const prev = document.getElementById('coverPreview');
         if (!prev) return;
         const emp = document.getElementById('coverEmpty');
@@ -3759,10 +3777,12 @@
                 scale *= 0.75;
             }
             if (bmp && bmp.close) bmp.close();
-            // [STORAGE-STAGE1] كتابة مزدوجة للغلاف: coverImg كما هو اليوم حرفياً، ونضيف coverUrl عند نجاح الرفع فقط.
-            const __coverUpd = { coverImg: dataUrl };
+            // [STORAGE-ONLY] الغلاف الجديد يذهب إلى Storage فقط: عند نجاح الرفع يُكتب
+            // { coverImg: "", coverUrl } — وupdate() يدمج، لذا يُفرَّغ coverImg صراحةً.
+            // عند فشل الرفع (المقترح المُعلَّم نفسه): يُكتب { coverImg: dataUrl } كما كتبته
+            // لوحة ما قبل Storage حرفياً، ولا يُمسّ coverUrl القائم.
             const __cu = await __prodUploadToStorage("covers/" + phone + ".jpg", dataUrl);
-            if (__cu) __coverUpd.coverUrl = __cu;
+            const __coverUpd = __cu ? { coverImg: "", coverUrl: __cu } : { coverImg: dataUrl };
             await update(ref(db, 'stores/' + phone + '/profile'), __coverUpd);
             if (st) st.textContent = 'تم حفظ صورة الغلاف ✅ — ستظهر للزبون ببطاقة محلك وبرأس صفحته.';
         } catch (e) {
