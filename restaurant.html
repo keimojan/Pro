@@ -989,7 +989,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     // 🔧[خ٢٣] استيراد أدوات الاستعلام المفهرس — القراءة الكاملة صارت ممنوعة بالقواعد
     import { getDatabase, ref, onValue, update, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-    import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+    import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
     import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
     import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
 
@@ -3496,6 +3496,11 @@
             return await getDownloadURL(r);
         } catch (e) { return ""; }
     }
+    // [STORAGE-DELETE] حذف كائن صورة من Firebase Storage حين تُحذف صورته من السجل.
+    // لا يرمي أبداً: أي فشل يُبتلع بصمت — حذف منتج أو إزالة غلاف لا يتعطّلان أبداً بسبب التخزين.
+    async function __prodDeleteFromStorage(path) {
+        try { await deleteObject(storageRef(storage, path)); } catch (e) { /* يُبتلع عمداً */ }
+    }
 
     function __prodPhone() {
         try { return normalizeSystemPhone(window.__resPhone || ""); } catch (e) { return ""; }
@@ -3794,7 +3799,14 @@
         const phone = __prodPhone();
         if (!phone) return alert('سجّل الدخول أولاً.');
         if (!confirm('إزالة صورة غلاف المحل؟ ستعود بطاقة محلك لعرض صورة أول منتج.')) return;
-        try { await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: null, coverUrl: null }); }
+        // [STORAGE-DELETE] حالة الملف المعروفة لدى اللوحة تجيب إن كان للغلاف كائن في Storage:
+        // coverUrl موجود ⇒ الكائن موجود في covers/{phone}.jpg (بما فيه أغلفة العهد المزدوج).
+        // غلاف قديم (coverImg فقط) لا كائن له — لا نداء. تُقرأ الحالة قبل الكتابة كي لا تتغيّر بينهما.
+        const __hadStorageCover = !!(__shopProfile || {}).coverUrl;
+        try {
+            await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: null, coverUrl: null });
+            if (__hadStorageCover) await __prodDeleteFromStorage("covers/" + phone + ".jpg");
+        }
         catch (e) { alert('تعذّرت إزالة الغلاف.'); }
     };
     window.toggleProductAvail = async function(id) {
@@ -3813,6 +3825,10 @@
         try {
             await set(ref(db, 'stores/' + phone + '/products/' + id), null);
             if (__prodEditingId === id) window.resetProductForm();
+            // [STORAGE-DELETE] منتج له imgUrl (من عهد Storage) تُحذف نسخة صورته من التخزين أيضاً —
+            // بعد نجاح حذف السجل فقط. منتج قديم (base64 فقط) لا كائن له في Storage: لا نداء إطلاقاً.
+            // المساعد لا يرمي أبداً، فلا يمكن أن يحوّل حذفاً ناجحاً إلى تنبيه فشل.
+            if (p.imgUrl) await __prodDeleteFromStorage("products/" + phone + "/" + id + ".jpg");
         } catch (e) {
             alert("تعذّر حذف المنتج — حاول مجدداً.");
         }
