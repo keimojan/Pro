@@ -3481,6 +3481,15 @@
     let __prodEditingId = null;
     let __prodPhotoData = "";
     let __prodCache = {};
+    // [STORAGE-STAGE1] رفع صورة مضغوطة (data URL) إلى Firebase Storage وإرجاع رابطها.
+    // أي فشل يُرجع "" — الحفظ الحالي (base64 داخل السجل) لا يتعطّل أبداً بسبب التخزين.
+    async function __prodUploadToStorage(path, dataUrl) {
+        try {
+            const r = storageRef(storage, path);
+            await uploadString(r, dataUrl, "data_url");
+            return await getDownloadURL(r);
+        } catch (e) { return ""; }
+    }
 
     function __prodPhone() {
         try { return normalizeSystemPhone(window.__resPhone || ""); } catch (e) { return ""; }
@@ -3635,6 +3644,16 @@
         if (!price || price <= 0) return alert("اكتب سعراً صحيحاً للمنتج.");
         const id = __prodEditingId || ('p' + Date.now().toString(36) + Math.floor(Math.random() * 999));
         const rec = { name, price, img: __prodPhotoData || "", ts: Date.now() };
+        // [STORAGE-STAGE1] كتابة مزدوجة: حقل img يبقى حرفياً كما هو اليوم، ونضيف imgUrl للصور الجديدة فقط.
+        // تعديل منتج بصورة لم تتغيّر ليس رفعاً جديداً: لا نرفع من جديد — نحمل imgUrl القائم فقط
+        // كي لا يمحوه set() الذي يستبدل السجل كاملاً. الصور المحفوظة قديماً تبقى كما هي تماماً.
+        const __prevProd = __prodEditingId ? (__prodCache[__prodEditingId] || {}) : {};
+        if (__prodEditingId && rec.img && rec.img === (__prevProd.img || "")) {
+            if (__prevProd.imgUrl) rec.imgUrl = __prevProd.imgUrl;
+        } else if (rec.img && rec.img.indexOf("data:") === 0) {
+            const __u = await __prodUploadToStorage("products/" + phone + "/" + id + ".jpg", rec.img);
+            if (__u) rec.imgUrl = __u;
+        }
         try {
             window.showLoading(true);
             await set(ref(db, 'stores/' + phone + '/products/' + id), rec);
@@ -3740,7 +3759,11 @@
                 scale *= 0.75;
             }
             if (bmp && bmp.close) bmp.close();
-            await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: dataUrl });
+            // [STORAGE-STAGE1] كتابة مزدوجة للغلاف: coverImg كما هو اليوم حرفياً، ونضيف coverUrl عند نجاح الرفع فقط.
+            const __coverUpd = { coverImg: dataUrl };
+            const __cu = await __prodUploadToStorage("covers/" + phone + ".jpg", dataUrl);
+            if (__cu) __coverUpd.coverUrl = __cu;
+            await update(ref(db, 'stores/' + phone + '/profile'), __coverUpd);
             if (st) st.textContent = 'تم حفظ صورة الغلاف ✅ — ستظهر للزبون ببطاقة محلك وبرأس صفحته.';
         } catch (e) {
             if (st) st.textContent = 'تعذّر حفظ الغلاف — جرّب صورة أخرى.';
