@@ -1063,11 +1063,23 @@
             } catch (e) {}
 
             const token = await auth.currentUser.getIdToken();
-            const r = await fetch(AI_ENDPOINT, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-                body: JSON.stringify(payload)
-            });
+            /* [AI-TIMEOUT 2026-11-23] مهلة إرسال 75 ثانية: أي تعليق مرضي عند
+               المزوّد يتحول إلى فشل محسوب تتولاه آلية الإعادة، بدل زرّ عالق
+               بلا نهاية. الخادم يجيب غالباً خلال 6–30 ثانية حتى مع سلسلة
+               النماذج الاحتياطية، فالمهلة لا تقطع نجاحاً حقيقياً. */
+            const sendCtrl = new AbortController();
+            const sendTimer = setTimeout(() => sendCtrl.abort(), 75000);
+            let r;
+            try {
+                r = await fetch(AI_ENDPOINT, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+                    body: JSON.stringify(payload),
+                    signal: sendCtrl.signal
+                });
+            } finally {
+                clearTimeout(sendTimer);
+            }
             const data = await r.json().catch(() => ({}));
             if (!r.ok || !data.ok) throw new Error(data.err || ("HTTP " + r.status));
             return data;
@@ -3093,6 +3105,20 @@
             hint.innerHTML = message || 'يجري تحليل التسجيل وإنشاء طلب واحد للكابتن تلقائياً.';
         }
 
+        /* [AI-BTNMIRROR 2026-11-23] حالة الزر مرآة لحالة المعلّق (بقرار المالك):
+           حين لا يعود الطلب قيد الإرسال — انتهت الإعادات — يعود الزر فوراً
+           إلى وضع قابل للضغط، وإلا بقي «يُرسل...» معلّقاً على طلب لا يُرسَل.
+           الحمولة نفسها تبقى محفوظة، فالضغط يعيد محاولة نفس التسجيل. */
+        function setVoiceRetryUI() {
+            const btn = document.getElementById('voiceBtn');
+            const icon = document.getElementById('voiceIcon');
+            const label = document.getElementById('voiceLabel');
+            if (!btn) return;
+            btn.classList.remove('recording', 'processing');
+            icon.textContent = '🎙️';
+            label.textContent = 'اضغط لإعادة المحاولة';
+        }
+
         function clearActiveVoicePayload() {
             if (activeVoiceRetryTimer) { clearTimeout(activeVoiceRetryTimer); activeVoiceRetryTimer = null; }
             activeVoicePayload = null;
@@ -3105,8 +3131,15 @@
             if (!active || voiceSubmissionPending) return;
             voiceSubmissionPending = true;
             setVoiceWaitingUI('يجري تحليل التسجيل وإنشاء طلب واحد ثم إرساله تلقائياً للكابتن.');
+            /* [AI-LIVEHINT 2026-11-23] حالة حية عند طول الانتظار: الكاشير يرى
+               أن التحليل جارٍ وأن الازدحام مؤقت — لا زرّاً متجمداً بلا خبر. */
+            const longWaitTimer = setTimeout(() => {
+                const hint = document.getElementById('voiceHint');
+                if (hint && voiceSubmissionPending) hint.innerHTML = 'ما زال التحليل جارٍ… ازدحام مؤقت عند مزوّد الذكاء؛ تُعاد المحاولة تلقائياً — اترك اللوحة مفتوحة.';
+            }, 15000);
             try {
                 const result = await sendToAI(active.payload, { queueOnFail: false });
+                clearTimeout(longWaitTimer);
                 if (!result || result.created !== true || !result.orderId) throw new Error('voice_order_not_created');
                 clearActiveVoicePayload();
                 showSuccessMessage(`<div style="background: var(--success); width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;"><i data-lucide="mic" style="color:#fff;width:26px;height:26px;"></i></div>
@@ -3114,6 +3147,7 @@
                     <div style="font-size:.85rem;opacity:.8;margin-top:4px;">أُرسل الطلب نفسه للتوزيع التلقائي على الكابتن</div>`);
                 resetVoiceUI();
             } catch (error) {
+                clearTimeout(longWaitTimer);
                 const reason = String(error && error.message || error);
                 if (reason.includes('voice_order_incomplete')) {
                     clearActiveVoicePayload();
@@ -3129,6 +3163,7 @@
                     ? 'تعذر تأكيد الطلب الآن؛ ستتم إعادة محاولة <b>نفس التسجيل</b> تلقائياً.'
                     : 'تعذر إرسال الطلب. اضغط الزر لإعادة محاولة <b>نفس التسجيل</b> فقط.';
                 if (active.tries < 6) activeVoiceRetryTimer = setTimeout(retryActiveVoiceOrder, 8000);
+                else setVoiceRetryUI();
             }
         }
 
