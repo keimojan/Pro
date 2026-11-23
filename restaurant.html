@@ -3794,7 +3794,7 @@
         const phone = __prodPhone();
         if (!phone) return alert('سجّل الدخول أولاً.');
         if (!confirm('إزالة صورة غلاف المحل؟ ستعود بطاقة محلك لعرض صورة أول منتج.')) return;
-        try { await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: null }); }
+        try { await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: null, coverUrl: null }); }
         catch (e) { alert('تعذّرت إزالة الغلاف.'); }
     };
     window.toggleProductAvail = async function(id) {
