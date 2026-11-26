@@ -3536,6 +3536,16 @@
     async function __prodDeleteFromStorage(path) {
         try { await deleteObject(storageRef(storage, path)); } catch (e) { /* يُبتلع عمداً */ }
     }
+    // [CATALOG-INDEX] فهرسة الكتالوج: كل تغيير على منتج (حفظ/إتاحة/حذف) أو على
+    // الغلاف يُسجَّل في stores/{phone}/catalog_index كي تلتقطه مزامنة الزبائن
+    // التفاضلية (3.49+): حفظ المنتج يرفع نسخته، وحذفه يزيل مدخله، والغلاف له
+    // مدخل _cover. لا يرمي أبداً — فشل الفهرسة لا يعطّل عمل التاجر أبداً.
+    async function __idxBump(phone, id) {
+        try { const t = Date.now(); await update(ref(db, 'stores/' + phone + '/catalog_index'), { [id]: { rev: t, updatedAt: t } }); } catch (e) { /* يُبتلع عمداً */ }
+    }
+    async function __idxDrop(phone, id) {
+        try { await set(ref(db, 'stores/' + phone + '/catalog_index/' + id), null); } catch (e) { /* يُبتلع عمداً */ }
+    }
 
     function __prodPhone() {
         try { return normalizeSystemPhone(window.__resPhone || ""); } catch (e) { return ""; }
@@ -3630,18 +3640,20 @@
                 w = draw.naturalWidth; h = draw.naturalHeight;
             }
             if (!w || !h) throw new Error('bad image');
-            let scale = Math.min(1, 700 / Math.max(w, h));
+            // [TINY-IMG] مواصفة كامل «صغير جداً» (2026-11-26): أطول ضلع ≤400px،
+            // هدف ≤15KB وسقف صلب ~20KB (طول dataUrl ≈ البايتات × 4/3).
+            let scale = Math.min(1, 400 / Math.max(w, h));
             let dataUrl = '';
-            for (let attempt = 0; attempt < 4; attempt++) {
+            for (let attempt = 0; attempt < 5; attempt++) {
                 const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
                 const canvas = document.createElement('canvas');
                 canvas.width = cw; canvas.height = ch;
                 canvas.getContext('2d').drawImage(draw, 0, 0, cw, ch);
-                let q = 0.82;
+                let q = 0.68;
                 dataUrl = canvas.toDataURL('image/jpeg', q);
-                while (dataUrl.length > 380000 && q > 0.45) { q -= 0.12; dataUrl = canvas.toDataURL('image/jpeg', q); }
-                if (dataUrl.length <= 380000) break;
-                scale *= 0.75;
+                while (dataUrl.length > 27300 && q > 0.4) { q -= 0.08; dataUrl = canvas.toDataURL('image/jpeg', q); }
+                if (dataUrl.length <= 27300) break;
+                scale *= 0.8;
             }
             if (bmp && bmp.close) bmp.close();
             __prodPhotoData = dataUrl;
@@ -3700,14 +3712,15 @@
         const id = __prodEditingId || ('p' + Date.now().toString(36) + Math.floor(Math.random() * 999));
         const rec = { name, price, img: __prodPhotoData || "", ts: Date.now() };
         // [STORAGE-ONLY] صورة جديدة (ضُغطت في هذه الجلسة) تذهب إلى Storage فقط: عند نجاح الرفع
-        // يُكتب img:"" + imgUrl — لا نسخة base64 في السجل. عند فشل الرفع (مقترح مُعلَّم لصاحب
-        // النظام): يبقى rec كما كتبته لوحة ما قبل Storage حرفياً (img = المضغوطة، بلا imgUrl)
-        // كي لا يخسر التاجر الصورة أبداً. تعديل بلا تغيير للصورة ليس رفعاً جديداً: لا رفع —
-        // تُحمل حالة السجل كما فُتحت (قديم يبقى base64، وStorage يبقى imgUrl) كي لا يمحوها
-        // set() الذي يستبدل السجل كاملاً — وهذا يصلح أيضاً حالة img:"" التي كانت ستفقد imgUrl.
+        // يُكتب img:"" + imgUrl — لا نسخة base64 في السجل أبداً. عند فشل الرفع يُلغى الحفظ
+        // كله (قاعدة كامل 2026-11-26: لا بيانات صور من قاعدة البيانات) — النموذج يبقى
+        // مفتوحاً بالصورة فلا يخسرها التاجر، ويعيد المحاولة. تعديل بلا تغيير للصورة ليس
+        // رفعاً جديداً: لا رفع — تُحمل حالة السجل كما فُتحت كي لا يمحوها set() الذي
+        // يستبدل السجل كاملاً.
         if (__prodPhotoFresh && rec.img) {
             const __u = await __prodUploadToStorage("products/" + phone + "/" + id + ".jpg", rec.img);
             if (__u) { rec.img = ""; rec.imgUrl = __u; }
+            else { alert("تعذّر رفع الصورة إلى التخزين — لم يُحفظ المنتج. تحقق من الاتصال وحاول مجدداً."); return; }
         } else if (__prodEditingId && !__prodPhotoFresh) {
             rec.img = __prodLoadedImg;
             if (__prodLoadedImgUrl) rec.imgUrl = __prodLoadedImgUrl;
@@ -3715,6 +3728,7 @@
         try {
             window.showLoading(true);
             await set(ref(db, 'stores/' + phone + '/products/' + id), rec);
+            await __idxBump(phone, id);
             window.showLoading(false);
             window.resetProductForm();
             alert("تم حفظ المنتج ✅");
@@ -3803,27 +3817,32 @@
                 w = draw.naturalWidth; h = draw.naturalHeight;
             }
             if (!w || !h) throw new Error('bad image');
-            let scale = Math.min(1, 900 / Math.max(w, h));
+            // [TINY-IMG] نفس مواصفة «صغير جداً»: أطول ضلع ≤400px، سقف ~20KB.
+            let scale = Math.min(1, 400 / Math.max(w, h));
             let dataUrl = '';
-            for (let attempt = 0; attempt < 4; attempt++) {
+            for (let attempt = 0; attempt < 5; attempt++) {
                 const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
                 const canvas = document.createElement('canvas');
                 canvas.width = cw; canvas.height = ch;
                 canvas.getContext('2d').drawImage(draw, 0, 0, cw, ch);
-                let q = 0.82;
+                let q = 0.68;
                 dataUrl = canvas.toDataURL('image/jpeg', q);
-                while (dataUrl.length > 380000 && q > 0.45) { q -= 0.12; dataUrl = canvas.toDataURL('image/jpeg', q); }
-                if (dataUrl.length <= 380000) break;
-                scale *= 0.75;
+                while (dataUrl.length > 27300 && q > 0.4) { q -= 0.08; dataUrl = canvas.toDataURL('image/jpeg', q); }
+                if (dataUrl.length <= 27300) break;
+                scale *= 0.8;
             }
             if (bmp && bmp.close) bmp.close();
             // [STORAGE-ONLY] الغلاف الجديد يذهب إلى Storage فقط: عند نجاح الرفع يُكتب
             // { coverImg: "", coverUrl } — وupdate() يدمج، لذا يُفرَّغ coverImg صراحةً.
-            // عند فشل الرفع (المقترح المُعلَّم نفسه): يُكتب { coverImg: dataUrl } كما كتبته
-            // لوحة ما قبل Storage حرفياً، ولا يُمسّ coverUrl القائم.
+            // الرابط يُنسَّخ بـ&v=زمن الرفع كي يلتقطه كاش صور الزبائن فوراً (رابط الغلاف
+            // ثابت المسار، فبدون النسخة يبقى الكاش على الصورة القديمة)، ويُفهرس الغلاف
+            // بمدخل _cover في catalog_index. عند فشل الرفع لا يُكتب شيء إطلاقاً —
+            // لا بيانات صور في قاعدة البيانات (قاعدة كامل 2026-11-26).
             const __cu = await __prodUploadToStorage("covers/" + phone + ".jpg", dataUrl);
-            const __coverUpd = __cu ? { coverImg: "", coverUrl: __cu } : { coverImg: dataUrl };
-            await update(ref(db, 'stores/' + phone + '/profile'), __coverUpd);
+            if (!__cu) { if (st) st.textContent = 'تعذّر رفع الغلاف إلى التخزين — لم يُحفظ. تحقق من الاتصال وحاول مجدداً.'; input.value = ''; return; }
+            const __cv = Date.now();
+            await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: "", coverUrl: __cu + "&v=" + __cv });
+            await __idxBump(phone, '_cover');
             if (st) st.textContent = 'تم حفظ صورة الغلاف ✅ — ستظهر للزبون ببطاقة محلك وبرأس صفحته.';
         } catch (e) {
             if (st) st.textContent = 'تعذّر حفظ الغلاف — جرّب صورة أخرى.';
@@ -3840,6 +3859,7 @@
         const __hadStorageCover = !!(__shopProfile || {}).coverUrl;
         try {
             await update(ref(db, 'stores/' + phone + '/profile'), { coverImg: null, coverUrl: null });
+            await __idxDrop(phone, '_cover');
             if (__hadStorageCover) await __prodDeleteFromStorage("covers/" + phone + ".jpg");
         }
         catch (e) { alert('تعذّرت إزالة الغلاف.'); }
@@ -3848,7 +3868,7 @@
         const phone = __prodPhone();
         if (!phone) return;
         const cur = (__prodCache[id] || {}).available === false;
-        try { await set(ref(db, 'stores/' + phone + '/products/' + id + '/available'), cur ? true : false); }
+        try { await set(ref(db, 'stores/' + phone + '/products/' + id + '/available'), cur ? true : false); await __idxBump(phone, id); }
         catch (e) { alert('تعذّر تغيير إتاحة المنتج.'); }
     };
 
@@ -3859,6 +3879,7 @@
         if (!confirm("حذف المنتج «" + (p.name || "") + "»؟")) return;
         try {
             await set(ref(db, 'stores/' + phone + '/products/' + id), null);
+            await __idxDrop(phone, id);
             if (__prodEditingId === id) window.resetProductForm();
             // [STORAGE-DELETE] منتج له imgUrl (من عهد Storage) تُحذف نسخة صورته من التخزين أيضاً —
             // بعد نجاح حذف السجل فقط. منتج قديم (base64 فقط) لا كائن له في Storage: لا نداء إطلاقاً.
